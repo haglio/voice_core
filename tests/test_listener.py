@@ -1,0 +1,249 @@
+from __future__ import annotations
+
+import array
+import json
+import logging
+import sys
+import wave
+from contextlib import contextmanager
+from dataclasses import replace
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from voice_core.commands import CommandRules
+from voice_core.listener import (
+    CommandListener,
+    Engines,
+    ListenerEvents,
+    ListenerSettings,
+    MicrophoneUnavailable,
+    RecognizerUnavailable,
+    why_unavailable,
+)
+
+RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_rescued=lambda phrase: False)
+STALLED_FOR = 11.0
+HALF_SECOND = array.array("h", [2000, -2000] * 4000).tobytes()
+
+
+class _Recognizer:
+    def __init__(self, model, sample_rate, grammar=None, *, reading="next"):
+        self.grammar = grammar
+        self._reading = reading
+        self.words = False
+        self.alternatives = 0
+        self._fed = 0
+
+    def SetWords(self, enable):  # noqa: N802 -- vosk's spelling
+        self.words = enable
+
+    def SetMaxAlternatives(self, count):  # noqa: N802
+        self.alternatives = count
+
+    def AcceptWaveform(self, data):  # noqa: N802
+        self._fed += 1
+        return self.grammar is not None and self._fed == 2  # noqa: PLR2004
+
+    def Result(self):  # noqa: N802
+        return json.dumps({"alternatives": [{"text": self._reading, "confidence": 1.0}]})
+
+    def FinalResult(self):  # noqa: N802
+        return ""
+
+    def PartialResult(self):  # noqa: N802
+        return json.dumps({"partial": "ne"})
+
+
+def _vosk(built, reading="next"):
+    def recognizer(*args):
+        built.append(_Recognizer(*args, reading=reading))
+        return built[-1]
+    return SimpleNamespace(Model=lambda model_name: model_name, KaldiRecognizer=recognizer)
+
+
+def _sounddevice(opened, blocks):
+    devices = [{"name": "Desk mic", "max_input_channels": 1, "hostapi": 0}]
+
+    @contextmanager
+    def stream(**kwargs):
+        opened.append(kwargs)
+        for block in blocks:
+            kwargs["callback"](block, len(block) // 2, None, None)
+        yield
+
+    return SimpleNamespace(
+        default=SimpleNamespace(device=(0, 0)),
+        query_devices=lambda index=None: devices if index is None else devices[index],
+        RawInputStream=stream,
+    )
+
+
+SETTINGS = ListenerSettings(model_name="a-model", device_name="desk", poll_seconds=0.001)
+TWO_BLOCKS = [HALF_SECOND, HALF_SECOND]
+
+
+def _listener(*, settings=SETTINGS, engines, keeps_misses=None, **events):
+    """A listener that stops itself at whichever event fires first."""
+    def stopping(wanted=None):
+        def event(*args):
+            if wanted is not None:
+                wanted(*args)
+            listener.stop()
+        return event
+
+    listener = CommandListener(
+        RULES, settings,
+        ListenerEvents(**{"heard": stopping(), "keeps_misses": keeps_misses,
+                          **{name: stopping(wanted) for name, wanted in events.items()}}),
+        engines)
+    return listener
+
+
+def test_running_hears_what_the_named_microphone_delivers_until_stopped():
+    built, opened, heard = [], [], []
+
+    _listener(heard=heard.append,
+              engines=Engines(_vosk(built), _sounddevice(opened, TWO_BLOCKS))).run()
+
+    assert [one.recognition.phrase for one in heard] == ["next"]
+    assert (opened[0]["device"], opened[0]["samplerate"], opened[0]["blocksize"],
+            opened[0]["dtype"], opened[0]["channels"]) == (0, 16000, 8000, "int16", 1)
+
+
+def _run_until_heard(settings=SETTINGS, **events):
+    built = []
+    _listener(settings=settings, engines=Engines(_vosk(built), _sounddevice([], TWO_BLOCKS)),
+              **events).run()
+    return built
+
+
+def test_the_grammar_recognizer_is_asked_for_its_ranked_readings_over_the_apps_phrases():
+    grammar_recognizer = _run_until_heard()[0]
+
+    assert json.loads(grammar_recognizer.grammar) == ["left next", "next", "[unk]"]
+    assert (grammar_recognizer.words, grammar_recognizer.alternatives) == (True, 5)
+
+
+def test_misses_are_captioned_by_an_unrestricted_recognizer_only_when_asked_for():
+    without = _run_until_heard()
+    with_captions = _run_until_heard(replace(SETTINGS, caption_misses=True))
+
+    assert [recognizer.grammar is None for recognizer in without] == [False]
+    assert [(recognizer.grammar is None, recognizer.words) for recognizer in with_captions] == [
+        (False, True), (True, True)]
+
+
+REFUSES = Mock(side_effect=OSError("no such thing"))
+
+
+def test_a_model_that_will_not_load_and_a_microphone_that_will_not_open_fail_by_name():
+    no_model = SimpleNamespace(Model=REFUSES, KaldiRecognizer=_Recognizer)
+    no_microphone = _sounddevice([], [])
+    no_microphone.RawInputStream = REFUSES
+
+    with pytest.raises(RecognizerUnavailable, match="no such thing"):
+        _listener(engines=Engines(no_model, _sounddevice([], []))).run()
+    with pytest.raises(MicrophoneUnavailable, match="no such thing"):
+        _listener(engines=Engines(_vosk([]), no_microphone)).run()
+
+
+def test_a_microphone_lookup_that_fails_falls_back_to_the_systems_default():
+    opened = []
+    backend = _sounddevice(opened, TWO_BLOCKS)
+    backend.query_devices = REFUSES
+
+    _listener(engines=Engines(_vosk([]), backend)).run()
+
+    assert opened[0]["device"] is None
+
+
+def test_a_microphone_that_goes_quiet_is_reported_once_with_how_long_it_has_been():
+    stalls = []
+    ticks = iter([0.0, 4.0, 11.0, 12.0])
+
+    _listener(stalled=stalls.append,
+              engines=Engines(_vosk([]), _sounddevice([], []), clock=lambda: next(ticks))).run()
+
+    assert stalls == [STALLED_FOR]
+
+
+def test_audio_coming_back_after_a_stall_is_news_of_its_own():
+    opened, recovered = [], []
+    ticks = iter([0.0, 11.0, "the microphone comes back"])
+
+    def clock():
+        tick = next(ticks, 12.0)
+        if tick == "the microphone comes back":
+            opened[0]["callback"](HALF_SECOND, 4000, None, None)
+            return 12.0
+        return tick
+
+    listener = CommandListener(
+        RULES, SETTINGS,
+        ListenerEvents(heard=print, recovered=lambda: (recovered.append(True), listener.stop())),
+        Engines(_vosk([]), _sounddevice(opened, []), clock=clock))
+    listener.run()
+
+    assert recovered == [True]
+
+
+def test_the_words_still_forming_reach_whoever_asked_for_them():
+    forming = []
+
+    _run_until_heard(partial=forming.append)
+
+    assert forming == ["ne"]
+
+
+def test_once_a_minute_the_log_says_how_loud_the_microphone_has_been(caplog):
+    ticks = iter([0.0, 0.0, 0.0, 1.0, 61.0])  # two blocks captured, the start, then each block read
+
+    with caplog.at_level(logging.DEBUG, logger="voice_core.listener"):
+        _listener(engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS),
+                                  clock=lambda: next(ticks, 61.0))).run()
+
+    assert "Voice: listening; loudest sample since the last report: 2000" in caplog.messages
+
+
+def test_with_no_engines_handed_in_the_installed_ones_are_used(monkeypatch):
+    built, opened = [], []
+    monkeypatch.setitem(sys.modules, "vosk", _vosk(built))
+    monkeypatch.setitem(sys.modules, "sounddevice", _sounddevice(opened, TWO_BLOCKS))
+
+    _listener(engines=None).run()
+
+    assert (len(built), len(opened)) == (1, 1)
+
+
+def test_why_voice_cannot_run_is_the_import_that_failed_or_nothing(monkeypatch):
+    monkeypatch.setitem(sys.modules, "vosk", _vosk([]))
+    monkeypatch.setitem(sys.modules, "sounddevice", _sounddevice([], []))
+    assert why_unavailable() == ""
+
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
+    assert "sounddevice" in why_unavailable()
+
+
+def _a_miss(tmp_path, **events):
+    built = []
+    engines = Engines(_vosk(built, reading="left net"), _sounddevice([], TWO_BLOCKS))
+    _listener(settings=replace(SETTINGS, miss_dir=tmp_path / "misses"), engines=engines,
+              **events).run()
+    return sorted((tmp_path / "misses").glob("*.wav"))
+
+
+def test_the_audio_of_a_miss_is_kept_where_the_app_said(tmp_path):
+    [clip] = _a_miss(tmp_path)
+
+    with wave.open(str(clip), "rb") as kept:
+        assert kept.getnframes() == len(HALF_SECOND + HALF_SECOND) // 2
+
+
+def test_nothing_is_kept_of_a_miss_while_the_app_is_not_listening(tmp_path):
+    assert _a_miss(tmp_path, keeps_misses=lambda: False) == []
+
+
+def test_a_miss_is_kept_while_the_app_says_it_is_listening(tmp_path):
+    assert len(_a_miss(tmp_path, keeps_misses=lambda: True)) == 1
