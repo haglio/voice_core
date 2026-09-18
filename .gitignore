@@ -1,5 +1,7 @@
 __pycache__/
 *.egg-info/
+# Written by `pip install <this checkout>`, when an app's venv takes an unlanded copy.
+build/
 
 # pCloud conflict copies (this dir syncs via pCloud). Never our files;
 # an untracked one dirties main and blocks every agent's merge.
