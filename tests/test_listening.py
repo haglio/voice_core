@@ -51,7 +51,7 @@ def test_nothing_is_heard_until_the_recognizer_settles_an_utterance():
     assert listening.feed(_block(), captured_at=10.5) is None
     assert listening.feed(_block(), captured_at=11.0) == Heard(
         Recognition(phrase="next", heard="next"), spoken_at=10.5, peak=LOUD,
-        audio=_block() + _block())
+        audio=_block() + _block(), candidates={"next": 0})
 
 
 def test_an_utterance_is_dated_from_the_first_block_the_recognizer_had_words_for():
@@ -104,7 +104,7 @@ def test_the_words_still_forming_are_passed_on_each_time_they_change_and_cleared
 
 
 def _heard(recognition):
-    return Heard(recognition, spoken_at=10.0, peak=LOUD, audio=b"")
+    return Heard(recognition, spoken_at=10.0, peak=LOUD, audio=b"", candidates={})
 
 
 def test_a_command_is_logged_with_how_long_ago_it_was_spoken_and_how_loud():
@@ -138,3 +138,10 @@ def test_every_way_of_not_being_a_command_is_logged_under_its_own_name():
         (logging.INFO, "Voice: ignored 'half' read from silence (peak 2000)"),
         (logging.DEBUG, "Voice: an utterance ended with nothing in it (peak 2000)"),
     ]
+
+
+def test_a_command_the_second_engine_did_not_read_is_logged_beside_what_it_read_instead():
+    doubted = Recognition(unconfirmed_phrase="next", heard="next", free_text="and then")
+
+    assert outcome_line(_heard(doubted), now=11.0, rules=RULES) == (
+        logging.INFO, "Voice: heard 'next' but the second engine read 'and then' (peak 2000)")

@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import json
 
-from voice_core.commands import SILENT_UTTERANCE_PEAK, CommandRules, Recognition, interpret
+from voice_core.commands import (
+    SILENT_UTTERANCE_PEAK,
+    CommandRules,
+    Recognition,
+    candidates,
+    interpret,
+)
 
 SPOKEN = 2000
 RULES = CommandRules(
@@ -111,3 +117,20 @@ def test_a_quiet_utterance_that_reaches_the_floor_still_counts():
     heard = interpret(_ranked("skip"), "", rules=RULES, peak=SILENT_UTTERANCE_PEAK)
 
     assert heard.phrase == "skip"
+
+
+def test_the_candidates_are_every_ranked_reading_that_is_a_phrase_with_the_rank_it_first_had():
+    found = candidates(_ranked("left net", "left next", "[unk]", "next", "left next"), rules=RULES,
+                       peak=SPOKEN)
+
+    assert found == {"left next": 1, "next": 3}
+    assert list(found) == ["left next", "next"]
+
+
+def test_silence_has_no_candidates():
+    assert candidates(_ranked("next"), rules=RULES, peak=SILENT_UTTERANCE_PEAK - 1) == {}
+
+
+def test_a_phrase_ruled_out_of_repairs_is_a_candidate_only_as_the_first_choice():
+    assert candidates(_ranked("net", "quit", "next"), rules=RULES, peak=SPOKEN) == {"next": 2}
+    assert candidates(_ranked("quit", "next"), rules=RULES, peak=SPOKEN) == {"quit": 0, "next": 1}

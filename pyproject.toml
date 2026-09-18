@@ -19,7 +19,15 @@ dependencies = [
 [tool.setuptools_scm]
 
 [project.optional-dependencies]
+# The second engine: an app that wants its commands double-checked, or speech taken
+# down that no phrase list holds, asks for this; one that only hears a phrase list
+# does not pay for it.
+whisper = [
+    "faster-whisper>=1,<2",
+    "numpy>=2.4,<3",
+]
 dev = [
+    "numpy>=2.4,<3",
     "pytest>=9,<10",
     "pytest-timeout>=2.4,<3",
     "ruff==0.16.6",

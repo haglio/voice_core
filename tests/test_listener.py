@@ -247,3 +247,19 @@ def test_nothing_is_kept_of_a_miss_while_the_app_is_not_listening(tmp_path):
 
 def test_a_miss_is_kept_while_the_app_says_it_is_listening(tmp_path):
     assert len(_a_miss(tmp_path, keeps_misses=lambda: True)) == 1
+
+
+def test_a_second_engine_settles_each_utterance_before_the_app_hears_of_it(tmp_path):
+    heard, asked = [], []
+
+    def second_opinion(audio, hint):
+        asked.append((len(audio), hint))
+        return "and then"
+
+    _listener(settings=replace(SETTINGS, miss_dir=tmp_path), heard=heard.append,
+              engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS),
+                              second_opinion=second_opinion)).run()
+
+    assert asked == [(len(HALF_SECOND + HALF_SECOND), "next")]
+    assert [one.recognition.unconfirmed_phrase for one in heard] == ["next"]
+    assert len(list(tmp_path.glob("*.wav"))) == 1

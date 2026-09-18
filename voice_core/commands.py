@@ -17,6 +17,11 @@ class CommandRules:
     never_rescued: Callable[[str], bool]
     confidence_threshold: float = 0.7
     silent_peak: int = SILENT_UTTERANCE_PEAK
+    # With a second engine listening: the phrases taken on the first engine's word alone.
+    stands_alone: Callable[[str], bool] | None = None
+    # How the app writes a phrase it had to spell by sound for the grammar ("go now" for
+    # a word the first engine lacks); None for a phrase written as it is said.
+    written: Callable[[str], str | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -25,6 +30,8 @@ class Recognition:
     # 0 the recognizer's first choice, higher a repair taken from under it.
     rank: int = 0
     refused_phrase: str | None = None
+    # The first engine's command that a second engine, asked, did not read.
+    unconfirmed_phrase: str | None = None
     unrecognized_text: str | None = None
     heard: str | None = None
     silent_reading: str | None = None
@@ -63,3 +70,13 @@ def _clears(confidences: Sequence[float], threshold: float) -> bool:
     # As a sum against the bar times the count: the quotient rounds three words
     # spoken exactly at the bar under it.
     return math.fsum(confidences) >= threshold * len(confidences)
+
+
+def candidates(grammar_json: str, *, rules: CommandRules, peak: int) -> dict[str, int]:
+    if peak < rules.silent_peak:
+        return {}
+    found: dict[str, int] = {}
+    for rank, reading in enumerate(hypotheses(grammar_json)):
+        if reading.text in rules.phrases and not (rank and rules.never_rescued(reading.text)):
+            found.setdefault(reading.text, rank)
+    return found

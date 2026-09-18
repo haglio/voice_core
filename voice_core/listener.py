@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -17,6 +18,7 @@ from voice_core.listening import Heard, Listening, outcome_line
 from voice_core.microphone import probe_input_device, resolve_input_device
 from voice_core.miss_clips import save_miss_audio
 from voice_core.readings import build_grammar
+from voice_core.second_opinion import settle
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,9 @@ GRAMMAR_ALTERNATIVES = 5
 # Without it, a session where every phrase missed and one where the microphone
 # was dead leave the same log.
 LISTEN_HEARTBEAT_S = 60.0
+
+# How long a closing listener waits for a reading already under way.
+SECOND_OPINION_PATIENCE_S = 5.0
 
 
 class RecognizerUnavailable(Exception):
@@ -80,6 +85,8 @@ class Engines:
     vosk: Any = None
     sounddevice: Any = None
     clock: Callable[[], float] = time.monotonic
+    # Reads an utterance's audio given a hint of phrases; see second_opinion.settle.
+    second_opinion: Callable[[bytes, str], str] | None = None
 
 
 class CommandListener:
@@ -92,6 +99,7 @@ class CommandListener:
         self._vosk = engines.vosk
         self._sounddevice = engines.sounddevice
         self._clock = engines.clock
+        self._second_opinion = engines.second_opinion
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -109,7 +117,7 @@ class CommandListener:
             stream = self._open_microphone(blocks)
         except Exception as exc:
             raise MicrophoneUnavailable(_reason(exc)) from exc
-        with stream:
+        with stream, self._delivery() as deliver:
             began = self._clock()
             stall = AudioStall(now=began)
             last_heartbeat = began
@@ -130,12 +138,38 @@ class CommandListener:
                                  listening.take_recent_level())
                 heard = listening.feed(data, captured_at=captured_at)
                 if heard is not None:
-                    logger.log(*outcome_line(heard, now=now, rules=self._rules))
-                    self._keep_a_miss(heard)
-                    self._events.heard(heard)
+                    deliver(heard)
+
+    @contextmanager
+    def _delivery(self):
+        """How a settled utterance reaches the app: at once, or -- a second engine taking
+        its second over each -- from one thread of its own, in the order they were spoken."""
+        if self._second_opinion is None:
+            yield self._deliver
+            return
+        waiting: queue.Queue[Heard | None] = queue.Queue()
+
+        def in_order() -> None:
+            while (heard := waiting.get()) is not None:
+                self._deliver(settle(heard, rules=self._rules, read=self._second_opinion))
+
+        worker = threading.Thread(target=in_order, name="voice-second-opinion", daemon=True)
+        worker.start()
+        try:
+            yield waiting.put
+        finally:
+            waiting.put(None)
+            worker.join(timeout=SECOND_OPINION_PATIENCE_S)
+
+    def _deliver(self, heard: Heard) -> None:
+        logger.log(*outcome_line(heard, now=self._clock(), rules=self._rules))
+        self._keep_a_miss(heard)
+        self._events.heard(heard)
 
     def _keep_a_miss(self, heard: Heard) -> None:
-        missed = heard.recognition.refused_phrase or heard.recognition.unrecognized_text
+        recognition = heard.recognition
+        missed = (recognition.refused_phrase or recognition.unrecognized_text
+                  or recognition.unconfirmed_phrase)
         listened_to = self._events.keeps_misses is None or self._events.keeps_misses()
         if missed and heard.audio and listened_to and self._settings.miss_dir is not None:
             save_miss_audio(self._settings.miss_dir, heard.audio,
