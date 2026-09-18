@@ -150,8 +150,9 @@ class CommandListener:
         waiting: queue.Queue[Heard | None] = queue.Queue()
 
         def in_order() -> None:
+            self._load_the_second_engine_ahead()
             while (heard := waiting.get()) is not None:
-                self._deliver(settle(heard, rules=self._rules, read=self._second_opinion))
+                self._deliver(self._settled(heard))
 
         worker = threading.Thread(target=in_order, name="voice-second-opinion", daemon=True)
         worker.start()
@@ -160,6 +161,22 @@ class CommandListener:
         finally:
             waiting.put(None)
             worker.join(timeout=SECOND_OPINION_PATIENCE_S)
+
+    def _load_the_second_engine_ahead(self) -> None:
+        preload = getattr(self._second_opinion, "preload", None)
+        if preload is None:
+            return
+        try:
+            preload()
+        except Exception:
+            logger.exception("Voice: the second engine did not load")
+
+    def _settled(self, heard: Heard) -> Heard:
+        try:
+            return settle(heard, rules=self._rules, read=self._second_opinion)
+        except Exception:
+            logger.exception("Voice: the second engine failed; the first engine's word stands")
+            return heard
 
     def _deliver(self, heard: Heard) -> None:
         logger.log(*outcome_line(heard, now=self._clock(), rules=self._rules))

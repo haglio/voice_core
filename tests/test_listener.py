@@ -263,3 +263,33 @@ def test_a_second_engine_settles_each_utterance_before_the_app_hears_of_it(tmp_p
     assert asked == [(len(HALF_SECOND + HALF_SECOND), "next")]
     assert [one.recognition.unconfirmed_phrase for one in heard] == ["next"]
     assert len(list(tmp_path.glob("*.wav"))) == 1
+
+
+def test_a_second_engine_that_fails_leaves_the_first_engines_word_standing(caplog):
+    heard = []
+    failing = Mock(side_effect=ModuleNotFoundError("No module named 'faster_whisper'"))
+
+    with caplog.at_level(logging.ERROR, logger="voice_core.listener"):
+        _listener(heard=heard.append,
+                  engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS),
+                                  second_opinion=failing)).run()
+
+    assert [one.recognition.phrase for one in heard] == ["next"]
+    assert "No module named 'faster_whisper'" in caplog.text
+
+
+def test_a_second_engine_that_can_load_ahead_is_loaded_before_the_first_utterance_needs_it():
+    order = []
+
+    class _Reader:
+        def preload(self):
+            order.append("loaded")
+
+        def __call__(self, audio, hint):
+            order.append("asked")
+            return hint
+
+    _listener(engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS),
+                              second_opinion=_Reader())).run()
+
+    assert order == ["loaded", "asked"]
