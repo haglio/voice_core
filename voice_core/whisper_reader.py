@@ -19,8 +19,10 @@ def load_faster_whisper(model_size: str = MODEL_SIZE):
     sys.modules.setdefault("torch", None)
     from faster_whisper import WhisperModel  # noqa: PLC0415 -- heavy, and only an app that asks
 
-    # On the CPU by design: the one GPU is for pictures and players.
-    return WhisperModel(model_size, device="cpu", compute_type="int8")
+    # On the CPU by design: the one GPU is for pictures and players. A reading took a median
+    # 0.43 s on two threads, 0.33 s on four and 0.27 s on eight (this machine, 2026-09-18):
+    # four is most of the gain and leaves the players their cores.
+    return WhisperModel(model_size, device="cpu", compute_type="int8", cpu_threads=4)
 
 
 class WhisperReader:
