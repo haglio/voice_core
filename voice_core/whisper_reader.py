@@ -6,7 +6,10 @@ from typing import Any
 
 import numpy as np
 
-MODEL_SIZE = "small"
+# Prompted with an utterance's own candidates, "base" chose as well as "small" on the owner's
+# recordings (7 of 10 missed commands either way, 3 against 9 invented in 930 utterances of
+# ordinary talk) in a quarter of the time: about half a second a reading on this machine.
+MODEL_SIZE = "base"
 
 
 def load_faster_whisper(model_size: str = MODEL_SIZE):
