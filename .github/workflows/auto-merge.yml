@@ -1,0 +1,15 @@
+# Arms auto-merge the moment a pull request opens; the arm itself is the family's, in
+# haglio/.github, and this file only says when to call it.
+name: auto-arm auto-merge
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+
+permissions: {}
+
+jobs:
+  arm:
+    if: ${{ github.event.pull_request.draft == false }}
+    uses: haglio/.github/.github/workflows/auto-merge.yml@main
+    secrets: inherit

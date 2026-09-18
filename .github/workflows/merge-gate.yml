@@ -1,0 +1,34 @@
+# The family's merge gate, published once in haglio/.github; this file says only what
+# differs about this repo. The check the merge queue requires is `full-suite / suite`.
+name: merge gate (full suite)
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+  push:
+    branches: [main]
+
+concurrency:
+  group: merge-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # No siblings cloned: app_support is pinned in pyproject, so pip fetches the
+  # tag this repo was built against.
+  full-suite:
+    uses: haglio/.github/.github/workflows/merge-gate.yml@main
+    with:
+      siblings: ""
+      python-version: "3.14"
+      timeout-minutes: 5
+
+  # A version for each landing, so the apps that run this one can pin the copy
+  # they were built against. The tag is the version: pyproject reads it with
+  # setuptools-scm.
+  tag:
+    if: github.event_name == 'push'
+    needs: full-suite
+    uses: haglio/.github/.github/workflows/tag-the-landing.yml@main
+    permissions:
+      contents: write

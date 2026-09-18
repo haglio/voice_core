@@ -1,0 +1,7 @@
+__pycache__/
+*.egg-info/
+
+# pCloud conflict copies (this dir syncs via pCloud). Never our files;
+# an untracked one dirties main and blocks every agent's merge.
+*\[conflicted*
+.coverage
