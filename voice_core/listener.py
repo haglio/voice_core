@@ -221,7 +221,7 @@ class CommandListener:
 
     def _hand_over_speech(self, heard: Heard) -> None:
         wanted = self._events.speech is not None and self._take_down is not None
-        if not wanted or heard.recognition.phrase or heard.peak < self._rules.silent_peak:
+        if not wanted or heard.recognition.phrase or self._read_out_of_silence(heard):
             return
         try:
             words = self._take_down(heard.audio, self._settings.speech_hint)
@@ -229,6 +229,12 @@ class CommandListener:
             logger.exception("Voice: the utterance could not be taken down")
             return
         self._events.speech(words, heard)
+
+    def _read_out_of_silence(self, heard: Heard) -> bool:
+        # Vosk ends utterances in a silent room too, and whisper makes sentences of those.
+        # Where pauses end them, the pause detector has already said somebody spoke -- and
+        # on the owner's quiet microphone one real stretch in seven peaks under this bar.
+        return self._settings.pauses is None and heard.peak < self._rules.silent_peak
 
     def _keep_a_miss(self, heard: Heard) -> None:
         recognition = heard.recognition

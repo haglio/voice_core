@@ -383,6 +383,24 @@ def test_what_was_read_out_of_silence_is_not_taken_down():
     take_down.assert_not_called()
 
 
+def test_where_pauses_decide_what_is_speech_a_quiet_sentence_is_still_taken_down():
+    # The owner's microphone is quiet: one stretch of his dictation in seven peaks under the bar
+    # that keeps commands from being read out of silence, and half of those hold words.
+    frame = array.array("h", [200, -200] * 240).tobytes()
+    quiet = bytes(len(frame))
+    pauses = PauseSettings(floor=26, ratio=2.0, calibration_frames=1, hangover_frames=2,
+                           min_speech_frames=2)
+    spoken = []
+
+    _listener(settings=replace(SETTINGS, pauses=pauses),
+              speech=lambda text, heard: spoken.append(text),
+              engines=Engines(_vosk([], reading="left net", settles=False),
+                              _sounddevice([], [quiet, frame, frame, quiet, quiet]),
+                              take_down=lambda audio, hint: "a little longer")).run()
+
+    assert spoken == ["a little longer"]
+
+
 def test_a_take_down_with_no_words_in_it_is_handed_over_all_the_same():
     # An app that says it did not catch that has to be told there was something to catch.
     assert _spoken("left net", lambda audio, hint: " . . . ") == [" . . . "]
