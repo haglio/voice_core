@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import array
+import sys
+import types
 from types import SimpleNamespace
 
 import pytest
 
-from voice_core.whisper_reader import WhisperReader
+from voice_core.whisper_reader import WhisperReader, load_faster_whisper
 
 QUIET_PCM = array.array("h", [0, 16384, -16384, 0]).tobytes()
 
@@ -74,3 +76,30 @@ def test_lifting_silence_does_not_divide_by_nothing():
     WhisperReader(load=lambda: model, for_dictation=True)(bytes(8), "")
 
     assert model.asked[0][0] == [0.0, 0.0, 0.0, 0.0]
+
+
+def _a_process_with_faster_whisper_in_it(monkeypatch):
+    # A copy, so whatever the loader leaves in the table of modules goes when the test does.
+    monkeypatch.setattr(sys, "modules", dict(sys.modules))
+    engine = types.ModuleType("faster_whisper")
+    engine.WhisperModel = lambda *args, **options: _Model()
+    sys.modules["faster_whisper"] = engine
+    sys.modules.pop("torch", None)
+
+
+def test_loading_whisper_refuses_the_torch_it_would_otherwise_import(monkeypatch):
+    _a_process_with_faster_whisper_in_it(monkeypatch)
+
+    load_faster_whisper("base")
+
+    assert sys.modules.get("torch", "absent") is None
+
+
+def test_a_torch_something_else_already_imported_is_left_alone(monkeypatch):
+    _a_process_with_faster_whisper_in_it(monkeypatch)
+    already = types.ModuleType("torch")
+    sys.modules["torch"] = already
+
+    load_faster_whisper("base")
+
+    assert sys.modules["torch"] is already
