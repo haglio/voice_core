@@ -9,18 +9,24 @@ with the app.
 ```python
 from voice_core.commands import CommandRules
 from voice_core.listener import CommandListener, Engines, ListenerEvents, ListenerSettings
+from voice_core.listening_thread import ListeningThread
 from voice_core.whisper_reader import WhisperReader
 
-listener = CommandListener(
+listening = ListeningThread(lambda: CommandListener(
     CommandRules(phrases=frozenset({"next", "left next", "quit"}),
                  never_rescued={"quit"}.__contains__),
     ListenerSettings(model_name="vosk-model-en-us-0.22-lgraph", device_name="Brio",
                      miss_dir=state_dir / "voice_misses"),
     ListenerEvents(heard=on_heard),
     Engines(second_opinion=WhisperReader()),
-)
-threading.Thread(target=listener.run, daemon=True).start()
+), failed=on_failure)
+listening.start()
 ```
+
+`ListeningThread` runs a listener on a thread of its own and can be stopped and started
+again, each start with a fresh listener; `stop()` waits for the microphone to close, though
+never on a listener that has wedged. `on_failure` receives what ended the listening: a
+`RecognizerUnavailable`, a `MicrophoneUnavailable`, or whatever else was raised.
 
 `on_heard` receives a `Heard`: the `Recognition` (the phrase that was said, or which
 kind of miss it was), when the utterance began, how loud it was, and its audio.

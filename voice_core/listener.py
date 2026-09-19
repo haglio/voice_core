@@ -104,7 +104,8 @@ class ListenerEvents:
     recovered: Callable[[], None] | None = None
     # Whether the room is being listened to: what a muted app mishears is not kept.
     keeps_misses: Callable[[], bool] | None = None
-    # For an app that takes dictation: the words of an utterance that was no command.
+    # For an app that takes dictation: the words of an utterance that was no command, handed
+    # over even when there were none to read, so the app can say it caught nothing.
     speech: Callable[[str, Heard], None] | None = None
 
 
@@ -181,7 +182,7 @@ class CommandListener:
         waiting: queue.Queue[Heard | None] = queue.Queue()
 
         def in_order() -> None:
-            self._load_the_second_engine_ahead()
+            self._load_the_engines_ahead()
             while (heard := waiting.get()) is not None:
                 self._deliver(self._settled(heard))
 
@@ -193,14 +194,15 @@ class CommandListener:
             waiting.put(None)
             worker.join(timeout=SECOND_OPINION_PATIENCE_S)
 
-    def _load_the_second_engine_ahead(self) -> None:
-        preload = getattr(self._second_opinion, "preload", None)
-        if preload is None:
-            return
-        try:
-            preload()
-        except Exception:
-            logger.exception("Voice: the second engine did not load")
+    def _load_the_engines_ahead(self) -> None:
+        for engine in (self._second_opinion, self._take_down):
+            preload = getattr(engine, "preload", None)
+            if preload is None:
+                continue
+            try:
+                preload()
+            except Exception:
+                logger.exception("Voice: the second engine did not load")
 
     def _settled(self, heard: Heard) -> Heard:
         if self._second_opinion is None:
@@ -226,8 +228,7 @@ class CommandListener:
         except Exception:
             logger.exception("Voice: the utterance could not be taken down")
             return
-        if any(character.isalpha() for character in words):
-            self._events.speech(words, heard)
+        self._events.speech(words, heard)
 
     def _keep_a_miss(self, heard: Heard) -> None:
         recognition = heard.recognition
