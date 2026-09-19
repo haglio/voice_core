@@ -5,7 +5,7 @@ import json
 import logging
 
 from voice_core.commands import CommandRules, Recognition
-from voice_core.listening import Heard, Listening, outcome_line
+from voice_core.listening import Heard, Listening, Recognizers, outcome_line
 
 RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_rescued=lambda phrase: False)
 RATE = 16000
@@ -46,7 +46,8 @@ def _ranked(*texts):
 
 
 def test_nothing_is_heard_until_the_recognizer_settles_an_utterance():
-    listening = Listening(RULES, _ScriptedRecognizer(finals={2: _ranked("next")}), sample_rate=RATE)
+    listening = Listening(RULES, Recognizers(_ScriptedRecognizer(finals={2: _ranked("next")})),
+                          sample_rate=RATE)
 
     assert listening.feed(_block(), captured_at=10.5) is None
     assert listening.feed(_block(), captured_at=11.0) == Heard(
@@ -56,7 +57,7 @@ def test_nothing_is_heard_until_the_recognizer_settles_an_utterance():
 
 def test_an_utterance_is_dated_from_the_first_block_the_recognizer_had_words_for():
     recognizer = _ScriptedRecognizer(finals={3: _ranked("left next")}, partials={2: "left"})
-    listening = Listening(RULES, recognizer, sample_rate=RATE)
+    listening = Listening(RULES, Recognizers(recognizer), sample_rate=RATE)
     listening.feed(_block(), captured_at=10.5)
     listening.feed(_block(), captured_at=11.0)
 
@@ -71,8 +72,9 @@ def _scored(text, conf):
 
 def test_a_miss_carries_the_unrestricted_reading_whenever_that_recognizer_finished_it():
     unrestricted = _ScriptedRecognizer(finals={1: _scored("what is next", 0.4)})
-    listening = Listening(RULES, _ScriptedRecognizer(finals={2: _ranked("left net")}),
-                          unrestricted=unrestricted, sample_rate=RATE)
+    listening = Listening(
+        RULES, Recognizers(_ScriptedRecognizer(finals={2: _ranked("left net")}), unrestricted),
+        sample_rate=RATE)
     listening.feed(_block(), captured_at=10.5)
 
     heard = listening.feed(_block(), captured_at=11.0)
@@ -83,8 +85,9 @@ def test_a_miss_carries_the_unrestricted_reading_whenever_that_recognizer_finish
 
 def test_an_unrestricted_reading_still_forming_is_cut_short_when_the_grammar_settles_first():
     unrestricted = _ScriptedRecognizer(still_forming=_scored("what is", 0.4))
-    listening = Listening(RULES, _ScriptedRecognizer(finals={1: _ranked("left net")}),
-                          unrestricted=unrestricted, sample_rate=RATE)
+    listening = Listening(
+        RULES, Recognizers(_ScriptedRecognizer(finals={1: _ranked("left net")}), unrestricted),
+        sample_rate=RATE)
 
     heard = listening.feed(_block(), captured_at=10.5)
 
@@ -95,7 +98,8 @@ def test_the_words_still_forming_are_passed_on_each_time_they_change_and_cleared
     forming = []
     recognizer = _ScriptedRecognizer(finals={4: _ranked("left next")},
                                      partials={1: "left", 2: "left", 3: "left next"})
-    listening = Listening(RULES, recognizer, sample_rate=RATE, on_partial=forming.append)
+    listening = Listening(RULES, Recognizers(recognizer), sample_rate=RATE,
+                          on_partial=forming.append)
 
     for number in range(4):
         listening.feed(_block(), captured_at=10.5 + number / 2)

@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import Any
 
-from voice_core.capture import CaptureLevel, Utterance
+from voice_core.capture import KEPT_BLOCKS, CaptureLevel, Utterance
 from voice_core.commands import CommandRules, Recognition, candidates, interpret
 from voice_core.readings import partial_text
 
@@ -19,20 +20,28 @@ class Heard:
     candidates: Mapping[str, int]
 
 
+@dataclass(frozen=True)
+class Recognizers:
+    grammar: Any
+    # Reads the same audio with no phrase list, only to caption what the grammar one missed.
+    unrestricted: Any = None
+
+
 class Listening:
-    def __init__(self, rules: CommandRules, recognizer, *, sample_rate: int,
-                 unrestricted=None, on_partial: Callable[[str], None] | None = None) -> None:
+    def __init__(self, rules: CommandRules, recognizers: Recognizers, *, sample_rate: int,
+                 on_partial: Callable[[str], None] | None = None,
+                 kept_blocks: int = KEPT_BLOCKS) -> None:
         self._on_partial = on_partial
         self._partial = ""
         self._rules = rules
-        self._recognizer = recognizer
-        self._unrestricted = unrestricted
+        self._recognizer = recognizers.grammar
+        self._unrestricted = recognizers.unrestricted
         # The unrestricted recognizer ends its utterances on its own schedule,
         # so its latest reading is banked until the grammar one settles.
         self._banked = ""
         self._sample_rate = sample_rate
         self._level = CaptureLevel()
-        self._utterance = Utterance()
+        self._utterance = Utterance(kept_blocks=kept_blocks)
 
     def feed(self, data: bytes, *, captured_at: float) -> Heard | None:
         self._level.note_block(data)

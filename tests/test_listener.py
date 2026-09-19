@@ -293,3 +293,62 @@ def test_a_second_engine_that_can_load_ahead_is_loaded_before_the_first_utteranc
                               second_opinion=_Reader())).run()
 
     assert order == ["loaded", "asked"]
+
+
+def test_an_utterance_that_is_no_command_is_taken_down_for_an_app_that_wants_speech():
+    spoken, asked = [], []
+
+    def take_down(audio, hint):
+        asked.append((len(audio), hint))
+        return "make the sky darker"
+
+    _listener(settings=replace(SETTINGS, speech_hint="Voice requests: request, over."),
+              speech=lambda text, heard: spoken.append((text, heard.recognition.unrecognized_text)),
+              engines=Engines(_vosk([], reading="left net"), _sounddevice([], TWO_BLOCKS),
+                              take_down=take_down)).run()
+
+    assert asked == [(len(HALF_SECOND + HALF_SECOND), "Voice requests: request, over.")]
+    assert spoken == [("make the sky darker", "left net")]
+
+
+def _spoken(reading, take_down, blocks=None):
+    spoken = []
+    _listener(speech=lambda text, heard: spoken.append(text),
+              engines=Engines(_vosk([], reading=reading),
+                              _sounddevice([], blocks or TWO_BLOCKS), take_down=take_down)).run()
+    return spoken
+
+
+def test_a_command_is_not_also_taken_down_as_speech():
+    take_down = Mock(return_value="next")
+
+    assert _spoken("next", take_down) == []
+    take_down.assert_not_called()
+
+
+def test_what_was_read_out_of_silence_is_not_taken_down():
+    take_down = Mock(return_value="thank you")
+
+    assert _spoken("left net", take_down, blocks=[bytes(len(HALF_SECOND))] * 2) == []
+    take_down.assert_not_called()
+
+
+def test_a_take_down_with_no_words_in_it_is_dropped():
+    assert _spoken("left net", lambda audio, hint: " . . . ") == []
+
+
+def test_an_engine_that_cannot_take_an_utterance_down_is_logged_and_nothing_is_said(caplog):
+    with caplog.at_level(logging.ERROR, logger="voice_core.listener"):
+        spoken = _spoken("left net", Mock(side_effect=OSError("model gone")))
+
+    assert spoken == []
+    assert "could not be taken down" in caplog.text
+
+
+def test_an_utterance_keeps_as_many_seconds_of_audio_as_the_app_asks_for():
+    heard = []
+
+    _listener(settings=replace(SETTINGS, kept_seconds=0.5), heard=heard.append,
+              engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS))).run()
+
+    assert [len(one.audio) for one in heard] == [len(HALF_SECOND)]

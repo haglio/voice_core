@@ -14,7 +14,7 @@ from typing import Any
 
 from voice_core.capture import AudioStall
 from voice_core.commands import CommandRules
-from voice_core.listening import Heard, Listening, outcome_line
+from voice_core.listening import Heard, Listening, Recognizers, outcome_line
 from voice_core.microphone import probe_input_device, resolve_input_device
 from voice_core.miss_clips import save_miss_audio
 from voice_core.readings import build_grammar
@@ -66,7 +66,12 @@ class ListenerSettings:
     device_name: str | None = None
     sample_rate: int = 16000
     caption_misses: bool = False
+    # How much of an utterance's audio is kept for a second engine and for a miss's clip:
+    # four seconds holds any command, a dictated sentence wants more.
+    kept_seconds: float = 4.0
     miss_dir: Path | None = None
+    # What the engine that takes speech down is told to expect, beyond ordinary words.
+    speech_hint: str = ""
     poll_seconds: float = 0.5
 
 
@@ -78,6 +83,8 @@ class ListenerEvents:
     recovered: Callable[[], None] | None = None
     # Whether the room is being listened to: what a muted app mishears is not kept.
     keeps_misses: Callable[[], bool] | None = None
+    # For an app that takes dictation: the words of an utterance that was no command.
+    speech: Callable[[str, Heard], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +94,8 @@ class Engines:
     clock: Callable[[], float] = time.monotonic
     # Reads an utterance's audio given a hint of phrases; see second_opinion.settle.
     second_opinion: Callable[[bytes, str], str] | None = None
+    # Reads an utterance's audio as ordinary speech, given the app's standing hint.
+    take_down: Callable[[bytes, str], str] | None = None
 
 
 class CommandListener:
@@ -100,6 +109,7 @@ class CommandListener:
         self._sounddevice = engines.sounddevice
         self._clock = engines.clock
         self._second_opinion = engines.second_opinion
+        self._take_down = engines.take_down
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -144,7 +154,7 @@ class CommandListener:
     def _delivery(self):
         """How a settled utterance reaches the app: at once, or -- a second engine taking
         its second over each -- from one thread of its own, in the order they were spoken."""
-        if self._second_opinion is None:
+        if self._second_opinion is None and self._take_down is None:
             yield self._deliver
             return
         waiting: queue.Queue[Heard | None] = queue.Queue()
@@ -172,6 +182,8 @@ class CommandListener:
             logger.exception("Voice: the second engine did not load")
 
     def _settled(self, heard: Heard) -> Heard:
+        if self._second_opinion is None:
+            return heard
         try:
             return settle(heard, rules=self._rules, read=self._second_opinion)
         except Exception:
@@ -182,6 +194,19 @@ class CommandListener:
         logger.log(*outcome_line(heard, now=self._clock(), rules=self._rules))
         self._keep_a_miss(heard)
         self._events.heard(heard)
+        self._hand_over_speech(heard)
+
+    def _hand_over_speech(self, heard: Heard) -> None:
+        wanted = self._events.speech is not None and self._take_down is not None
+        if not wanted or heard.recognition.phrase or heard.peak < self._rules.silent_peak:
+            return
+        try:
+            words = self._take_down(heard.audio, self._settings.speech_hint)
+        except Exception:
+            logger.exception("Voice: the utterance could not be taken down")
+            return
+        if any(character.isalpha() for character in words):
+            self._events.speech(words, heard)
 
     def _keep_a_miss(self, heard: Heard) -> None:
         recognition = heard.recognition
@@ -212,8 +237,9 @@ class CommandListener:
         if self._settings.caption_misses:
             unrestricted = self._vosk.KaldiRecognizer(model, sample_rate)
             unrestricted.SetWords(True)
-        return Listening(self._rules, recognizer, sample_rate=sample_rate,
-                         unrestricted=unrestricted, on_partial=self._events.partial)
+        return Listening(self._rules, Recognizers(recognizer, unrestricted),
+                         sample_rate=sample_rate, on_partial=self._events.partial,
+                         kept_blocks=round(self._settings.kept_seconds * sample_rate / BLOCK_SAMPLES))
 
     def _open_microphone(self, blocks: queue.Queue[tuple[bytes, float]]):
         return self._sounddevice.RawInputStream(
