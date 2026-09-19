@@ -14,9 +14,10 @@ from typing import Any
 
 from voice_core.capture import AudioStall
 from voice_core.commands import CommandRules
-from voice_core.listening import Heard, Listening, Recognizers, outcome_line
+from voice_core.listening import Heard, Listening, PausedListening, Recognizers, outcome_line
 from voice_core.microphone import probe_input_device, resolve_input_device
 from voice_core.miss_clips import save_miss_audio
+from voice_core.pauses import PauseSegmenter
 from voice_core.readings import build_grammar
 from voice_core.second_opinion import settle
 
@@ -61,6 +62,23 @@ def why_unavailable() -> str:
 
 
 @dataclass(frozen=True)
+class PauseSettings:
+    """Where an utterance ends for an app that takes dictation, in 16-bit sample units.
+
+    The owner's microphone is quiet -- his speech runs 60 to 600 a frame, against digital
+    silence -- so the floor is the one his dictation app settled on over replayed sessions
+    (0.0008 of full scale), not the 0.008 Origenerator had, which sat above most of his words.
+    Half a second of quiet ends an utterance; under 180 ms of sound holds no word."""
+
+    floor: float = 26.0
+    ratio: float = 2.5
+    calibration_frames: int = 15
+    hangover_frames: int = 17
+    min_speech_frames: int = 6
+    frame_samples: int = 480  # 30 ms at 16 kHz
+
+
+@dataclass(frozen=True)
 class ListenerSettings:
     model_name: str
     device_name: str | None = None
@@ -69,6 +87,9 @@ class ListenerSettings:
     # How much of an utterance's audio is kept for a second engine and for a miss's clip:
     # four seconds holds any command, a dictated sentence wants more.
     kept_seconds: float = 4.0
+    # Set by an app that takes dictation: utterances end where the speaker pauses, since vosk
+    # ends one only when its grammar has nothing more to say.
+    pauses: PauseSettings | None = None
     miss_dir: Path | None = None
     # What the engine that takes speech down is told to expect, beyond ordinary words.
     speech_hint: str = ""
@@ -237,17 +258,31 @@ class CommandListener:
         if self._settings.caption_misses:
             unrestricted = self._vosk.KaldiRecognizer(model, sample_rate)
             unrestricted.SetWords(True)
+        pauses = self._settings.pauses
+        if pauses is not None:
+            return PausedListening(
+                self._rules, Recognizers(recognizer),
+                PauseSegmenter(floor=pauses.floor, ratio=pauses.ratio,
+                               calibration_frames=pauses.calibration_frames,
+                               hangover_frames=pauses.hangover_frames,
+                               min_speech_frames=pauses.min_speech_frames),
+                sample_rate=sample_rate)
         return Listening(self._rules, Recognizers(recognizer, unrestricted),
                          sample_rate=sample_rate, on_partial=self._events.partial,
                          kept_blocks=round(self._settings.kept_seconds * sample_rate / BLOCK_SAMPLES))
 
     def _open_microphone(self, blocks: queue.Queue[tuple[bytes, float]]):
         return self._sounddevice.RawInputStream(
-            samplerate=self._settings.sample_rate, blocksize=BLOCK_SAMPLES, dtype="int16", channels=1,
+            samplerate=self._settings.sample_rate, blocksize=self._block_samples(), dtype="int16",
+            channels=1,
             device=self._device_index(),
             callback=lambda indata, _frames, _time, _status: blocks.put(
                 (bytes(indata), self._clock())),
         )
+
+    def _block_samples(self) -> int:
+        pauses = self._settings.pauses
+        return BLOCK_SAMPLES if pauses is None else pauses.frame_samples
 
     def _device_index(self) -> int | None:
         try:

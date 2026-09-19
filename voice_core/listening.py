@@ -7,7 +7,8 @@ from typing import Any
 
 from voice_core.capture import KEPT_BLOCKS, CaptureLevel, Utterance
 from voice_core.commands import CommandRules, Recognition, candidates, interpret
-from voice_core.readings import partial_text
+from voice_core.pauses import PauseSegmenter
+from voice_core.readings import UNKNOWN, hypotheses, partial_text
 
 
 @dataclass(frozen=True)
@@ -102,3 +103,55 @@ def outcome_line(heard: Heard, *, now: float, rules: CommandRules) -> tuple[int,
         return logging.INFO, (
             f"Voice: ignored {recognition.silent_reading!r} read from silence (peak {peak})")
     return logging.DEBUG, f"Voice: an utterance ended with nothing in it (peak {peak})"
+
+
+class PausedListening:
+    """Listening for an app that also takes dictation: an utterance ends where the speaker
+    pauses (see pauses.PauseSegmenter), and the recognizer is made to finish there."""
+
+    def __init__(self, rules: CommandRules, recognizers: Recognizers, segmenter: PauseSegmenter, *,
+                 sample_rate: int) -> None:
+        self._rules = rules
+        self._recognizer = recognizers.grammar
+        self._segmenter = segmenter
+        self._sample_rate = sample_rate
+        self._level = CaptureLevel()
+        self._began_at: float | None = None
+        self._settled_partway: list[str] = []
+
+    def feed(self, data: bytes, *, captured_at: float) -> Heard | None:
+        self._level.note_block(data)
+        settled = self._recognizer.Result() if self._recognizer.AcceptWaveform(data) else None
+        was_speaking = self._segmenter.speaking
+        audio = self._segmenter.push(data)
+        if was_speaking and audio is None and not self._segmenter.speaking:
+            self._forget_a_sound_too_short_to_be_a_word()
+            return None
+        if settled is not None and (self._segmenter.speaking or audio is not None):
+            self._settled_partway.append(settled)
+        if self._began_at is None and self._segmenter.speaking:
+            self._began_at = captured_at - (len(data) / 2) / self._sample_rate
+        if audio is None:
+            return None
+        peak = self._level.take_utterance()
+        ranked = self._recognizer.FinalResult()
+        began_at, self._began_at = self._began_at, None
+        partway, self._settled_partway = self._settled_partway, []
+        if partway:
+            # A command is one breath; this was several readings' worth of talk.
+            said = " ".join(reading[0].text for reading in map(hypotheses, [*partway, ranked])
+                            if reading and reading[0].text != UNKNOWN)
+            return Heard(Recognition(unrecognized_text=said or None, heard=said or None),
+                         spoken_at=began_at, peak=peak, audio=audio, candidates={})
+        return Heard(interpret(ranked, "", rules=self._rules, peak=peak), spoken_at=began_at,
+                     peak=peak, audio=audio,
+                     candidates=candidates(ranked, rules=self._rules, peak=peak))
+
+    def take_recent_level(self) -> int:
+        return self._level.take_recent()
+
+    def _forget_a_sound_too_short_to_be_a_word(self) -> None:
+        self._recognizer.FinalResult()
+        self._level.take_utterance()
+        self._began_at = None
+        self._settled_partway = []

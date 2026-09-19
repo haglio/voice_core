@@ -19,6 +19,7 @@ from voice_core.listener import (
     ListenerEvents,
     ListenerSettings,
     MicrophoneUnavailable,
+    PauseSettings,
     RecognizerUnavailable,
     why_unavailable,
 )
@@ -29,9 +30,10 @@ HALF_SECOND = array.array("h", [2000, -2000] * 4000).tobytes()
 
 
 class _Recognizer:
-    def __init__(self, model, sample_rate, grammar=None, *, reading="next"):
+    def __init__(self, model, sample_rate, grammar=None, *, reading="next", settles=True):
         self.grammar = grammar
         self._reading = reading
+        self._settles = settles
         self.words = False
         self.alternatives = 0
         self._fed = 0
@@ -44,21 +46,21 @@ class _Recognizer:
 
     def AcceptWaveform(self, data):  # noqa: N802
         self._fed += 1
-        return self.grammar is not None and self._fed == 2  # noqa: PLR2004
+        return self._settles and self.grammar is not None and self._fed == 2  # noqa: PLR2004
 
     def Result(self):  # noqa: N802
         return json.dumps({"alternatives": [{"text": self._reading, "confidence": 1.0}]})
 
     def FinalResult(self):  # noqa: N802
-        return ""
+        return self.Result() if self.grammar is not None else ""
 
     def PartialResult(self):  # noqa: N802
         return json.dumps({"partial": "ne"})
 
 
-def _vosk(built, reading="next"):
+def _vosk(built, reading="next", settles=True):
     def recognizer(*args):
-        built.append(_Recognizer(*args, reading=reading))
+        built.append(_Recognizer(*args, reading=reading, settles=settles))
         return built[-1]
     return SimpleNamespace(Model=lambda model_name: model_name, KaldiRecognizer=recognizer)
 
@@ -352,3 +354,19 @@ def test_an_utterance_keeps_as_many_seconds_of_audio_as_the_app_asks_for():
               engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS))).run()
 
     assert [len(one.audio) for one in heard] == [len(HALF_SECOND)]
+
+
+def test_an_app_that_takes_dictation_hears_utterances_end_where_the_speaker_pauses():
+    frame = array.array("h", [2000, -2000] * 240).tobytes()
+    quiet = bytes(len(frame))
+    opened, heard = [], []
+    pauses = PauseSettings(floor=262, ratio=2.0, calibration_frames=1, hangover_frames=2,
+                           min_speech_frames=2)
+
+    _listener(settings=replace(SETTINGS, pauses=pauses), heard=heard.append,
+              engines=Engines(_vosk([], settles=False),
+                              _sounddevice(opened, [quiet, frame, frame, quiet, quiet]))).run()
+
+    assert opened[0]["blocksize"] == len(frame) // 2
+    assert [(one.recognition.phrase, one.audio) for one in heard] == [
+        ("next", frame + frame + quiet + quiet)]
