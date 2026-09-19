@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from voice_core.readings import UNKNOWN, hypotheses
+from voice_core.readings import UNKNOWN, Hypothesis, hypotheses
 
 # The noise suppressor on his microphone cuts to digital silence between
 # utterances, and the recognizer reads words out of it; speech clears this.
@@ -39,11 +39,11 @@ class Recognition:
 
 
 def interpret(grammar_json: str, free_json: str, *, rules: CommandRules, peak: int) -> Recognition:
-    readings = hypotheses(grammar_json)
-    spoken = next((reading.text for reading in readings if reading.text != UNKNOWN), None)
+    readings = _as_said(hypotheses(grammar_json), rules)
+    spoken = next((reading.text for reading in readings if reading.text not in ("", UNKNOWN)), None)
     if peak < rules.silent_peak:
         return Recognition(silent_reading=spoken)
-    free = next(iter(hypotheses(free_json)), None)
+    free = next(iter(_as_said(hypotheses(free_json), rules)), None)
     free_text = free.text if free and free.text != UNKNOWN else None
     for rank, hypothesis in enumerate(readings):
         if hypothesis.text not in rules.phrases:
@@ -62,6 +62,29 @@ def interpret(grammar_json: str, free_json: str, *, rules: CommandRules, peak: i
     return Recognition()
 
 
+# His microphone's noise suppressor opens with a click the recognizer reads as "the": in one
+# session it led all three commands he spoke ("the enter vr") and was the whole of some forty
+# utterances nobody said.
+_THE_MICROPHONE_OPENING = "the"
+
+
+def _as_said(readings: Sequence[Hypothesis], rules: CommandRules) -> list[Hypothesis]:
+    """The readings without the microphone's opening at either end, rank for rank: one that
+    was nothing else is kept as an empty place, so a phrase under it is still a repair."""
+    return [reading if reading.text in rules.phrases
+            else replace(reading, text=_without_the_opening(reading.text))
+            for reading in readings]
+
+
+def _without_the_opening(text: str) -> str:
+    words = text.split()
+    while words and words[0] == _THE_MICROPHONE_OPENING:
+        words = words[1:]
+    while words and words[-1] == _THE_MICROPHONE_OPENING:
+        words = words[:-1]
+    return " ".join(words)
+
+
 def _shares_a_word(reading: str, first_choice: str) -> bool:
     return bool(set(reading.split()) & set(first_choice.split()))
 
@@ -76,7 +99,7 @@ def candidates(grammar_json: str, *, rules: CommandRules, peak: int) -> dict[str
     if peak < rules.silent_peak:
         return {}
     found: dict[str, int] = {}
-    for rank, reading in enumerate(hypotheses(grammar_json)):
+    for rank, reading in enumerate(_as_said(hypotheses(grammar_json), rules)):
         if reading.text in rules.phrases and not (rank and rules.never_rescued(reading.text)):
             found.setdefault(reading.text, rank)
     return found

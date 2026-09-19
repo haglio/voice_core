@@ -134,3 +134,34 @@ def test_silence_has_no_candidates():
 def test_a_phrase_ruled_out_of_repairs_is_a_candidate_only_as_the_first_choice():
     assert candidates(_ranked("net", "quit", "next"), rules=RULES, peak=SPOKEN) == {"next": 2}
     assert candidates(_ranked("quit", "next"), rules=RULES, peak=SPOKEN) == {"quit": 0, "next": 1}
+
+
+def test_a_the_at_either_end_of_a_reading_is_the_microphone_opening_not_a_word_he_said():
+    led = interpret(_ranked("the left next"), "", rules=RULES, peak=SPOKEN)
+    trailed = interpret(_ranked("left next the"), "", rules=RULES, peak=SPOKEN)
+
+    assert led == trailed == Recognition(phrase="left next", heard="left next")
+
+
+def test_a_phrase_with_the_microphone_opening_on_it_is_a_candidate_as_the_phrase_itself():
+    found = candidates(_ranked("the left net", "the left next", "next the"), rules=RULES, peak=SPOKEN)
+
+    assert found == {"left next": 1, "next": 2}
+
+
+def test_the_microphone_opening_on_its_own_is_nothing_said_at_all():
+    heard = interpret(_ranked("the", "the the"), _scored("the", 0.9), rules=RULES, peak=SPOKEN)
+
+    assert heard == Recognition()
+
+
+def test_a_reading_that_is_no_phrase_is_reported_without_the_microphone_opening_on_it():
+    heard = interpret(_ranked("the left net"), "", rules=RULES, peak=SPOKEN)
+
+    assert heard == Recognition(unrecognized_text="left net", heard="left net")
+
+
+def test_what_was_heard_is_the_first_reading_with_words_left_in_it():
+    heard = interpret(_ranked("the", "left net", "left next"), "", rules=RULES, peak=SPOKEN)
+
+    assert heard == Recognition(phrase="left next", rank=2, heard="left net")
