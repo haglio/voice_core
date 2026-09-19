@@ -48,3 +48,29 @@ def test_with_no_hint_whisper_is_given_no_prompt_at_all():
     WhisperReader(load=lambda: model)(QUIET_PCM, "")
 
     assert model.asked[0][1]["initial_prompt"] is None
+
+
+def test_a_reader_for_dictation_lifts_a_quiet_microphone_and_lets_whisper_skip_what_is_not_speech():
+    model = _Model("make the sky darker")
+
+    WhisperReader(load=lambda: model, for_dictation=True)(QUIET_PCM, "")
+
+    [(samples, options)] = model.asked
+    assert samples == pytest.approx([0.0, 0.95, -0.95, 0.0])
+    assert options["vad_filter"] is True
+
+
+def test_a_reader_for_commands_leaves_the_audio_as_it_was_recorded():
+    model = _Model("next")
+
+    WhisperReader(load=lambda: model)(QUIET_PCM, "next")
+
+    assert model.asked[0][1]["vad_filter"] is False
+
+
+def test_lifting_silence_does_not_divide_by_nothing():
+    model = _Model("")
+
+    WhisperReader(load=lambda: model, for_dictation=True)(bytes(8), "")
+
+    assert model.asked[0][0] == [0.0, 0.0, 0.0, 0.0]
