@@ -354,6 +354,21 @@ def _spoken(reading, take_down, blocks=None):
     return spoken
 
 
+def test_the_engine_that_takes_speech_down_is_loaded_ahead_of_the_first_sentence_too():
+    order = []
+
+    class _Reader:
+        def preload(self):
+            order.append("loaded")
+
+        def __call__(self, audio, hint):
+            order.append("asked")
+            return "and then"
+
+    assert _spoken("left net", _Reader()) == ["and then"]
+    assert order == ["loaded", "asked"]
+
+
 def test_a_command_is_not_also_taken_down_as_speech():
     take_down = Mock(return_value="next")
 
@@ -368,8 +383,9 @@ def test_what_was_read_out_of_silence_is_not_taken_down():
     take_down.assert_not_called()
 
 
-def test_a_take_down_with_no_words_in_it_is_dropped():
-    assert _spoken("left net", lambda audio, hint: " . . . ") == []
+def test_a_take_down_with_no_words_in_it_is_handed_over_all_the_same():
+    # An app that says it did not catch that has to be told there was something to catch.
+    assert _spoken("left net", lambda audio, hint: " . . . ") == [" . . . "]
 
 
 def test_an_engine_that_cannot_take_an_utterance_down_is_logged_and_nothing_is_said(caplog):
