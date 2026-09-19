@@ -251,6 +251,39 @@ def test_a_miss_is_kept_while_the_app_says_it_is_listening(tmp_path):
     assert len(_a_miss(tmp_path, keeps_misses=lambda: True)) == 1
 
 
+def test_an_app_that_names_nowhere_for_misses_has_none_of_its_audio_written(monkeypatch):
+    # Origenerator promises that what is said to it never reaches the disk.
+    kept = Mock()
+    monkeypatch.setattr("voice_core.listener.save_miss_audio", kept)
+    heard = []
+
+    _listener(heard=heard.append,
+              engines=Engines(_vosk([], reading="left net"), _sounddevice([], TWO_BLOCKS))).run()
+
+    assert [one.recognition.unrecognized_text for one in heard] == ["left net"]
+    kept.assert_not_called()
+
+
+def test_what_the_microphone_delivered_is_kept_though_the_driver_reuses_its_buffer():
+    heard = []
+    quiet = bytes(len(HALF_SECOND))
+
+    @contextmanager
+    def stream(**kwargs):
+        buffer = bytearray(HALF_SECOND)
+        kwargs["callback"](buffer, len(buffer) // 2, None, None)
+        buffer[:] = quiet
+        kwargs["callback"](buffer, len(buffer) // 2, None, None)
+        yield
+
+    backend = _sounddevice([], [])
+    backend.RawInputStream = stream
+
+    _listener(heard=heard.append, engines=Engines(_vosk([]), backend)).run()
+
+    assert [one.audio for one in heard] == [HALF_SECOND + quiet]
+
+
 def test_a_second_engine_settles_each_utterance_before_the_app_hears_of_it(tmp_path):
     heard, asked = [], []
 
