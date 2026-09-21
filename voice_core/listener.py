@@ -7,23 +7,21 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Any
 
 from voice_core.capture import AudioStall
 from voice_core.commands import CommandRules
-from voice_core.listening import Heard, Listening, PausedListening, Recognizers, outcome_line
+from voice_core.listening import Heard, Listening, Recognizers, outcome_line
 from voice_core.microphone import probe_input_device, resolve_input_device
 from voice_core.miss_clips import save_miss_audio
-from voice_core.pauses import PauseSegmenter
+from voice_core.pauses import PauseSegmenter, PauseSettings
 from voice_core.readings import build_grammar
 from voice_core.second_opinion import settle
 
 logger = logging.getLogger(__name__)
-
-BLOCK_SAMPLES = 8000
 
 # Vosk's grammar restricts the vocabulary, not the phrases: it decodes any
 # sequence of the phrases' words, so the right phrase often sits in the rankings
@@ -62,34 +60,12 @@ def why_unavailable() -> str:
 
 
 @dataclass(frozen=True)
-class PauseSettings:
-    """Where an utterance ends for an app that takes dictation, in 16-bit sample units.
-
-    The owner's microphone is quiet -- his speech runs 60 to 600 a frame, against digital
-    silence -- so the floor is the one his dictation app settled on over replayed sessions
-    (0.0008 of full scale), not the 0.008 Origenerator had, which sat above most of his words.
-    Half a second of quiet ends an utterance; under 180 ms of sound holds no word."""
-
-    floor: float = 26.0
-    ratio: float = 2.5
-    calibration_frames: int = 15
-    hangover_frames: int = 17
-    min_speech_frames: int = 6
-    frame_samples: int = 480  # 30 ms at 16 kHz
-
-
-@dataclass(frozen=True)
 class ListenerSettings:
     model_name: str
     device_name: str | None = None
     sample_rate: int = 16000
     caption_misses: bool = False
-    # How much of an utterance's audio is kept for a second engine and for a miss's clip:
-    # four seconds holds any command, a dictated sentence wants more.
-    kept_seconds: float = 4.0
-    # Set by an app that takes dictation: utterances end where the speaker pauses, since vosk
-    # ends one only when its grammar has nothing more to say.
-    pauses: PauseSettings | None = None
+    pauses: PauseSettings = field(default_factory=PauseSettings)
     miss_dir: Path | None = None
     # What the engine that takes speech down is told to expect, beyond ordinary words.
     speech_hint: str = ""
@@ -155,7 +131,7 @@ class CommandListener:
             last_heartbeat = began
             while not self._stop.is_set():
                 try:
-                    data, captured_at = blocks.get(timeout=self._settings.poll_seconds)
+                    data, started_at = blocks.get(timeout=self._settings.poll_seconds)
                 except queue.Empty:
                     self._note_silence(stall)
                     continue
@@ -168,7 +144,7 @@ class CommandListener:
                     last_heartbeat = now
                     logger.debug("Voice: listening; loudest sample since the last report: %d",
                                  listening.take_recent_level())
-                heard = listening.feed(data, captured_at=captured_at)
+                heard = listening.feed(data, started_at=started_at)
                 if heard is not None:
                     deliver(heard)
 
@@ -219,9 +195,11 @@ class CommandListener:
         self._events.heard(heard)
         self._hand_over_speech(heard)
 
+    def _takes_dictation(self) -> bool:
+        return self._events.speech is not None and self._take_down is not None
+
     def _hand_over_speech(self, heard: Heard) -> None:
-        wanted = self._events.speech is not None and self._take_down is not None
-        if not wanted or heard.recognition.phrase or self._read_out_of_silence(heard):
+        if not self._takes_dictation() or heard.recognition.phrase:
             return
         try:
             words = self._take_down(heard.audio, self._settings.speech_hint)
@@ -229,12 +207,6 @@ class CommandListener:
             logger.exception("Voice: the utterance could not be taken down")
             return
         self._events.speech(words, heard)
-
-    def _read_out_of_silence(self, heard: Heard) -> bool:
-        # Vosk ends utterances in a silent room too, and whisper makes sentences of those.
-        # Where pauses end them, the pause detector has already said somebody spoke -- and
-        # on the owner's quiet microphone one real stretch in seven peaks under this bar.
-        return self._settings.pauses is None and heard.peak < self._rules.silent_peak
 
     def _keep_a_miss(self, heard: Heard) -> None:
         recognition = heard.recognition
@@ -265,31 +237,17 @@ class CommandListener:
         if self._settings.caption_misses:
             unrestricted = self._vosk.KaldiRecognizer(model, sample_rate)
             unrestricted.SetWords(True)
-        pauses = self._settings.pauses
-        if pauses is not None:
-            return PausedListening(
-                self._rules, Recognizers(recognizer),
-                PauseSegmenter(floor=pauses.floor, ratio=pauses.ratio,
-                               calibration_frames=pauses.calibration_frames,
-                               hangover_frames=pauses.hangover_frames,
-                               min_speech_frames=pauses.min_speech_frames),
-                sample_rate=sample_rate)
         return Listening(self._rules, Recognizers(recognizer, unrestricted),
-                         sample_rate=sample_rate, on_partial=self._events.partial,
-                         kept_blocks=round(self._settings.kept_seconds * sample_rate / BLOCK_SAMPLES))
+                         PauseSegmenter(self._settings.pauses), on_partial=self._events.partial,
+                         for_dictation=self._takes_dictation())
 
     def _open_microphone(self, blocks: queue.Queue[tuple[bytes, float]]):
         return self._sounddevice.RawInputStream(
-            samplerate=self._settings.sample_rate, blocksize=self._block_samples(), dtype="int16",
-            channels=1,
-            device=self._device_index(),
-            callback=lambda indata, _frames, _time, _status: blocks.put(
-                (bytes(indata), self._clock())),
+            samplerate=self._settings.sample_rate, blocksize=self._settings.pauses.frame_samples,
+            dtype="int16", channels=1, device=self._device_index(),
+            callback=lambda indata, frames, _time, _status: blocks.put(
+                (bytes(indata), self._clock() - frames / self._settings.sample_rate)),
         )
-
-    def _block_samples(self) -> int:
-        pauses = self._settings.pauses
-        return BLOCK_SAMPLES if pauses is None else pauses.frame_samples
 
     def _device_index(self) -> int | None:
         try:

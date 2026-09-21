@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import array
-from collections import deque
 
 
 class CaptureLevel:
@@ -47,25 +46,3 @@ class AudioStall:
         recovered, self._stalled = self._stalled, False
         self._last_block_at = now
         return recovered
-
-
-KEPT_BLOCKS = 8  # four seconds at the listener's half-second blocks
-
-
-class Utterance:
-    def __init__(self, *, kept_blocks: int = KEPT_BLOCKS) -> None:
-        self._started_at: float | None = None
-        self._blocks: deque[bytes] = deque(maxlen=kept_blocks - 1)
-
-    def note_block(self, pcm: bytes, *, block_started_at: float, has_partial: bool) -> None:
-        self._blocks.append(pcm)
-        if not has_partial:
-            self._started_at = None
-        elif self._started_at is None:
-            self._started_at = block_started_at
-
-    def take(self, *, final_block: bytes, fallback: float) -> tuple[float, bytes]:
-        started_at, audio = self._started_at, b"".join(self._blocks) + final_block
-        self._started_at = None
-        self._blocks.clear()
-        return (fallback if started_at is None else started_at), audio
