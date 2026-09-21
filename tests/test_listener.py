@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import array
+import itertools
 import json
 import logging
 import sys
@@ -26,14 +27,20 @@ from voice_core.listener import (
 
 RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_rescued=lambda phrase: False)
 STALLED_FOR = 11.0
-HALF_SECOND = array.array("h", [2000, -2000] * 4000).tobytes()
+FRAME = 480
+VOICED = array.array("h", [2000, -2000] * (FRAME // 2)).tobytes()
+QUIET = bytes(FRAME * 2)
+PAUSES = PauseSettings(floor=1600, ratio=1.5, calibration_frames=1, hangover_frames=2,
+                       min_speech_frames=2, frame_samples=FRAME)
+A_COMMAND = [QUIET, VOICED, VOICED, QUIET, QUIET]
+ITS_AUDIO = VOICED + VOICED + QUIET + QUIET
 
 
 class _Recognizer:
-    def __init__(self, model, sample_rate, grammar=None, *, reading="next", settles=True):
+    def __init__(self, model, sample_rate, grammar=None, *, reading="next", settles_at=None):
         self.grammar = grammar
         self._reading = reading
-        self._settles = settles
+        self._settles_at = settles_at
         self.words = False
         self.alternatives = 0
         self._fed = 0
@@ -46,7 +53,7 @@ class _Recognizer:
 
     def AcceptWaveform(self, data):  # noqa: N802
         self._fed += 1
-        return self._settles and self.grammar is not None and self._fed == 2  # noqa: PLR2004
+        return self.grammar is not None and self._fed == self._settles_at
 
     def Result(self):  # noqa: N802
         return json.dumps({"alternatives": [{"text": self._reading, "confidence": 1.0}]})
@@ -57,10 +64,13 @@ class _Recognizer:
     def PartialResult(self):  # noqa: N802
         return json.dumps({"partial": "ne"})
 
+    def Reset(self):  # noqa: N802
+        pass
 
-def _vosk(built, reading="next", settles=True):
+
+def _vosk(built, reading="next", settles_at=None):
     def recognizer(*args):
-        built.append(_Recognizer(*args, reading=reading, settles=settles))
+        built.append(_Recognizer(*args, reading=reading, settles_at=settles_at))
         return built[-1]
     return SimpleNamespace(Model=lambda model_name: model_name, KaldiRecognizer=recognizer)
 
@@ -82,8 +92,8 @@ def _sounddevice(opened, blocks):
     )
 
 
-SETTINGS = ListenerSettings(model_name="a-model", device_name="desk", poll_seconds=0.001)
-TWO_BLOCKS = [HALF_SECOND, HALF_SECOND]
+SETTINGS = ListenerSettings(model_name="a-model", device_name="desk", poll_seconds=0.001,
+                            pauses=PAUSES)
 
 
 def _listener(*, settings=SETTINGS, engines, keeps_misses=None, **events):
@@ -103,20 +113,20 @@ def _listener(*, settings=SETTINGS, engines, keeps_misses=None, **events):
     return listener
 
 
-def test_running_hears_what_the_named_microphone_delivers_until_stopped():
+def test_running_hears_what_the_named_microphone_delivers_a_frame_at_a_time_until_stopped():
     built, opened, heard = [], [], []
 
     _listener(heard=heard.append,
-              engines=Engines(_vosk(built), _sounddevice(opened, TWO_BLOCKS))).run()
+              engines=Engines(_vosk(built), _sounddevice(opened, A_COMMAND))).run()
 
-    assert [one.recognition.phrase for one in heard] == ["next"]
+    assert [(one.recognition.phrase, one.audio) for one in heard] == [("next", ITS_AUDIO)]
     assert (opened[0]["device"], opened[0]["samplerate"], opened[0]["blocksize"],
-            opened[0]["dtype"], opened[0]["channels"]) == (0, 16000, 8000, "int16", 1)
+            opened[0]["dtype"], opened[0]["channels"]) == (0, 16000, FRAME, "int16", 1)
 
 
 def _run_until_heard(settings=SETTINGS, **events):
     built = []
-    _listener(settings=settings, engines=Engines(_vosk(built), _sounddevice([], TWO_BLOCKS)),
+    _listener(settings=settings, engines=Engines(_vosk(built), _sounddevice([], A_COMMAND)),
               **events).run()
     return built
 
@@ -153,7 +163,7 @@ def test_a_model_that_will_not_load_and_a_microphone_that_will_not_open_fail_by_
 
 def test_a_microphone_lookup_that_fails_falls_back_to_the_systems_default():
     opened = []
-    backend = _sounddevice(opened, TWO_BLOCKS)
+    backend = _sounddevice(opened, A_COMMAND)
     backend.query_devices = REFUSES
 
     _listener(engines=Engines(_vosk([]), backend)).run()
@@ -178,7 +188,7 @@ def test_audio_coming_back_after_a_stall_is_news_of_its_own():
     def clock():
         tick = next(ticks, 12.0)
         if tick == "the microphone comes back":
-            opened[0]["callback"](HALF_SECOND, 4000, None, None)
+            opened[0]["callback"](VOICED, FRAME, None, None)
             return 12.0
         return tick
 
@@ -200,10 +210,11 @@ def test_the_words_still_forming_reach_whoever_asked_for_them():
 
 
 def test_once_a_minute_the_log_says_how_loud_the_microphone_has_been(caplog):
-    ticks = iter([0.0, 0.0, 0.0, 1.0, 61.0])  # two blocks captured, the start, then each block read
+    # five frames captured, the start, then each frame read
+    ticks = iter([0.0] * len(A_COMMAND) + [0.0, 1.0, 1.0, 61.0])
 
     with caplog.at_level(logging.DEBUG, logger="voice_core.listener"):
-        _listener(engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS),
+        _listener(engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
                                   clock=lambda: next(ticks, 61.0))).run()
 
     assert "Voice: listening; loudest sample since the last report: 2000" in caplog.messages
@@ -212,7 +223,7 @@ def test_once_a_minute_the_log_says_how_loud_the_microphone_has_been(caplog):
 def test_with_no_engines_handed_in_the_installed_ones_are_used(monkeypatch):
     built, opened = [], []
     monkeypatch.setitem(sys.modules, "vosk", _vosk(built))
-    monkeypatch.setitem(sys.modules, "sounddevice", _sounddevice(opened, TWO_BLOCKS))
+    monkeypatch.setitem(sys.modules, "sounddevice", _sounddevice(opened, A_COMMAND))
 
     _listener(engines=None).run()
 
@@ -230,7 +241,7 @@ def test_why_voice_cannot_run_is_the_import_that_failed_or_nothing(monkeypatch):
 
 def _a_miss(tmp_path, **events):
     built = []
-    engines = Engines(_vosk(built, reading="left net"), _sounddevice([], TWO_BLOCKS))
+    engines = Engines(_vosk(built, reading="left net"), _sounddevice([], A_COMMAND))
     _listener(settings=replace(SETTINGS, miss_dir=tmp_path / "misses"), engines=engines,
               **events).run()
     return sorted((tmp_path / "misses").glob("*.wav"))
@@ -240,7 +251,7 @@ def test_the_audio_of_a_miss_is_kept_where_the_app_said(tmp_path):
     [clip] = _a_miss(tmp_path)
 
     with wave.open(str(clip), "rb") as kept:
-        assert kept.getnframes() == len(HALF_SECOND + HALF_SECOND) // 2
+        assert kept.getnframes() == len(ITS_AUDIO) // 2
 
 
 def test_nothing_is_kept_of_a_miss_while_the_app_is_not_listening(tmp_path):
@@ -258,7 +269,7 @@ def test_an_app_that_names_nowhere_for_misses_has_none_of_its_audio_written(monk
     heard = []
 
     _listener(heard=heard.append,
-              engines=Engines(_vosk([], reading="left net"), _sounddevice([], TWO_BLOCKS))).run()
+              engines=Engines(_vosk([], reading="left net"), _sounddevice([], A_COMMAND))).run()
 
     assert [one.recognition.unrecognized_text for one in heard] == ["left net"]
     kept.assert_not_called()
@@ -266,14 +277,13 @@ def test_an_app_that_names_nowhere_for_misses_has_none_of_its_audio_written(monk
 
 def test_what_the_microphone_delivered_is_kept_though_the_driver_reuses_its_buffer():
     heard = []
-    quiet = bytes(len(HALF_SECOND))
 
     @contextmanager
     def stream(**kwargs):
-        buffer = bytearray(HALF_SECOND)
-        kwargs["callback"](buffer, len(buffer) // 2, None, None)
-        buffer[:] = quiet
-        kwargs["callback"](buffer, len(buffer) // 2, None, None)
+        buffer = bytearray(FRAME * 2)
+        for frame in A_COMMAND:
+            buffer[:] = frame
+            kwargs["callback"](buffer, FRAME, None, None)
         yield
 
     backend = _sounddevice([], [])
@@ -281,7 +291,7 @@ def test_what_the_microphone_delivered_is_kept_though_the_driver_reuses_its_buff
 
     _listener(heard=heard.append, engines=Engines(_vosk([]), backend)).run()
 
-    assert [one.audio for one in heard] == [HALF_SECOND + quiet]
+    assert [one.audio for one in heard] == [ITS_AUDIO]
 
 
 def test_a_second_engine_settles_each_utterance_before_the_app_hears_of_it(tmp_path):
@@ -292,10 +302,10 @@ def test_a_second_engine_settles_each_utterance_before_the_app_hears_of_it(tmp_p
         return "and then"
 
     _listener(settings=replace(SETTINGS, miss_dir=tmp_path), heard=heard.append,
-              engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS),
+              engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
                               second_opinion=second_opinion)).run()
 
-    assert asked == [(len(HALF_SECOND + HALF_SECOND), "next")]
+    assert asked == [(len(ITS_AUDIO), "next")]
     assert [one.recognition.unconfirmed_phrase for one in heard] == ["next"]
     assert len(list(tmp_path.glob("*.wav"))) == 1
 
@@ -306,7 +316,7 @@ def test_a_second_engine_that_fails_leaves_the_first_engines_word_standing(caplo
 
     with caplog.at_level(logging.ERROR, logger="voice_core.listener"):
         _listener(heard=heard.append,
-                  engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS),
+                  engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
                                   second_opinion=failing)).run()
 
     assert [one.recognition.phrase for one in heard] == ["next"]
@@ -324,7 +334,7 @@ def test_a_second_engine_that_can_load_ahead_is_loaded_before_the_first_utteranc
             order.append("asked")
             return hint
 
-    _listener(engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS),
+    _listener(engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
                               second_opinion=_Reader())).run()
 
     assert order == ["loaded", "asked"]
@@ -339,10 +349,10 @@ def test_an_utterance_that_is_no_command_is_taken_down_for_an_app_that_wants_spe
 
     _listener(settings=replace(SETTINGS, speech_hint="Voice requests: request, over."),
               speech=lambda text, heard: spoken.append((text, heard.recognition.unrecognized_text)),
-              engines=Engines(_vosk([], reading="left net"), _sounddevice([], TWO_BLOCKS),
+              engines=Engines(_vosk([], reading="left net"), _sounddevice([], A_COMMAND),
                               take_down=take_down)).run()
 
-    assert asked == [(len(HALF_SECOND + HALF_SECOND), "Voice requests: request, over.")]
+    assert asked == [(len(ITS_AUDIO), "Voice requests: request, over.")]
     assert spoken == [("make the sky darker", "left net")]
 
 
@@ -350,7 +360,7 @@ def _spoken(reading, take_down, blocks=None):
     spoken = []
     _listener(speech=lambda text, heard: spoken.append(text),
               engines=Engines(_vosk([], reading=reading),
-                              _sounddevice([], blocks or TWO_BLOCKS), take_down=take_down)).run()
+                              _sounddevice([], blocks or A_COMMAND), take_down=take_down)).run()
     return spoken
 
 
@@ -376,14 +386,19 @@ def test_a_command_is_not_also_taken_down_as_speech():
     take_down.assert_not_called()
 
 
-def test_what_was_read_out_of_silence_is_not_taken_down():
+def test_a_quiet_room_the_recognizer_reads_words_out_of_is_never_taken_down_as_speech():
     take_down = Mock(return_value="thank you")
+    spoken, ticks = [], itertools.count()
 
-    assert _spoken("left net", take_down, blocks=[bytes(len(HALF_SECOND))] * 2) == []
+    _listener(speech=lambda text, heard: spoken.append(text), stalled=lambda idle: None,
+              engines=Engines(_vosk([], reading="left net"), _sounddevice([], [QUIET] * 8),
+                              clock=lambda: float(next(ticks)), take_down=take_down)).run()
+
+    assert spoken == []
     take_down.assert_not_called()
 
 
-def test_where_pauses_decide_what_is_speech_a_quiet_sentence_is_still_taken_down():
+def test_a_quiet_sentence_is_still_taken_down():
     # The owner's microphone is quiet: one stretch of his dictation in seven peaks under the bar
     # that keeps commands from being read out of silence, and half of those hold words.
     frame = array.array("h", [200, -200] * 240).tobytes()
@@ -394,7 +409,7 @@ def test_where_pauses_decide_what_is_speech_a_quiet_sentence_is_still_taken_down
 
     _listener(settings=replace(SETTINGS, pauses=pauses),
               speech=lambda text, heard: spoken.append(text),
-              engines=Engines(_vosk([], reading="left net", settles=False),
+              engines=Engines(_vosk([], reading="left net"),
                               _sounddevice([], [quiet, frame, frame, quiet, quiet]),
                               take_down=lambda audio, hint: "a little longer")).run()
 
@@ -414,26 +429,16 @@ def test_an_engine_that_cannot_take_an_utterance_down_is_logged_and_nothing_is_s
     assert "could not be taken down" in caplog.text
 
 
-def test_an_utterance_keeps_as_many_seconds_of_audio_as_the_app_asks_for():
+def _heard_by(*, an_app_taking_dictation):
     heard = []
+    wants_speech = {"speech": lambda text, heard: None} if an_app_taking_dictation else {}
+    _listener(heard=heard.append, **wants_speech,
+              engines=Engines(_vosk([], settles_at=3), _sounddevice([], A_COMMAND),
+                              take_down=Mock(return_value="") if an_app_taking_dictation else None)
+              ).run()
+    return heard[0].recognition
 
-    _listener(settings=replace(SETTINGS, kept_seconds=0.5), heard=heard.append,
-              engines=Engines(_vosk([]), _sounddevice([], TWO_BLOCKS))).run()
 
-    assert [len(one.audio) for one in heard] == [len(HALF_SECOND)]
-
-
-def test_an_app_that_takes_dictation_hears_utterances_end_where_the_speaker_pauses():
-    frame = array.array("h", [2000, -2000] * 240).tobytes()
-    quiet = bytes(len(frame))
-    opened, heard = [], []
-    pauses = PauseSettings(floor=262, ratio=2.0, calibration_frames=1, hangover_frames=2,
-                           min_speech_frames=2)
-
-    _listener(settings=replace(SETTINGS, pauses=pauses), heard=heard.append,
-              engines=Engines(_vosk([], settles=False),
-                              _sounddevice(opened, [quiet, frame, frame, quiet, quiet]))).run()
-
-    assert opened[0]["blocksize"] == len(frame) // 2
-    assert [(one.recognition.phrase, one.audio) for one in heard] == [
-        ("next", frame + frame + quiet + quiet)]
+def test_a_breath_read_twice_is_talk_to_an_app_taking_dictation_and_a_command_to_any_other():
+    assert _heard_by(an_app_taking_dictation=False).phrase == "next"
+    assert _heard_by(an_app_taking_dictation=True).unrecognized_text == "next next"

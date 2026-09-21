@@ -19,6 +19,13 @@ def _parsed(raw_json: str) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def joined(raw_readings: Iterable[str]) -> str:
+    parsed = [_parsed(raw) for raw in raw_readings]
+    texts = (str(reading.get("text", "")).strip() for reading in parsed)
+    return json.dumps({"text": " ".join(text for text in texts if text),
+                       "result": [word for reading in parsed for word in reading.get("result") or []]})
+
+
 def partial_text(raw_json: str) -> str:
     text = str(_parsed(raw_json).get("partial", "")).strip()
     return "" if text == UNKNOWN else text
