@@ -108,7 +108,8 @@ def _first_choice(ranked: str) -> str:
 
 def outcome_line(heard: Heard, *, now: float, rules: CommandRules) -> tuple[int, str]:
     recognition, peak = heard.recognition, heard.peak
-    unrestricted = recognition.free_text or ""
+    unrestricted = _length(recognition.free_text if recognition.heard
+                           else recognition.unrecognized_text)
     if recognition.phrase:
         repaired = (f" -- the recognizer's choice {recognition.rank + 1}, under "
                     f"{recognition.heard!r}, which is no command" if recognition.rank else "")
@@ -117,15 +118,20 @@ def outcome_line(heard: Heard, *, now: float, rules: CommandRules) -> tuple[int,
             f"(spoken {now - heard.spoken_at:.2f}s before recognition, peak {peak})")
     if recognition.unconfirmed_phrase:
         return logging.INFO, (f"Voice: heard {recognition.unconfirmed_phrase!r} but the second "
-                              f"engine read {unrestricted!r} (peak {peak})")
+                              f"engine read {unrestricted} (peak {peak})")
     if recognition.refused_phrase:
         return logging.INFO, (
             f"Voice: heard {recognition.refused_phrase!r} but its confidence was under "
-            f"{rules.confidence_threshold:.2f} (unrestricted reading {unrestricted!r}, peak {peak})")
+            f"{rules.confidence_threshold:.2f} (unrestricted reading {unrestricted}, peak {peak})")
     if recognition.unrecognized_text:
-        return logging.INFO, (f"Unrecognized speech: {recognition.unrecognized_text!r} "
-                              f"(unrestricted reading {unrestricted!r}, peak {peak})")
+        return logging.INFO, (f"Unrecognized speech: {recognition.heard or ''!r} "
+                              f"(unrestricted reading {unrestricted}, peak {peak})")
     if recognition.silent_reading:
         return logging.INFO, (
             f"Voice: ignored {recognition.silent_reading!r} read from silence (peak {peak})")
     return logging.DEBUG, f"Voice: an utterance ended with nothing in it (peak {peak})"
+
+
+def _length(reading: str | None) -> str:
+    count = len((reading or "").split())
+    return f"{count} word{'' if count == 1 else 's'}"

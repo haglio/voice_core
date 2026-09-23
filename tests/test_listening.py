@@ -213,15 +213,25 @@ def test_every_way_of_not_being_a_command_is_logged_under_its_own_name():
 
     assert lines == [
         (logging.INFO, ("Voice: heard 'next' but its confidence was under 0.70 "
-                        "(unrestricted reading 'text', peak 2000)")),
-        (logging.INFO, "Unrecognized speech: 'left net' (unrestricted reading '', peak 2000)"),
+                        "(unrestricted reading 1 word, peak 2000)")),
+        (logging.INFO, "Unrecognized speech: 'left net' (unrestricted reading 0 words, peak 2000)"),
         (logging.INFO, "Voice: ignored 'half' read from silence (peak 2000)"),
         (logging.DEBUG, "Voice: an utterance ended with nothing in it (peak 2000)"),
     ]
 
 
-def test_a_command_the_second_engine_did_not_read_is_logged_beside_what_it_read_instead():
-    doubted = Recognition(unconfirmed_phrase="next", heard="next", free_text="and then")
+def test_what_an_unrestricted_engine_read_is_logged_by_its_length_never_its_words():
+    lines = [outcome_line(_heard(recognition), now=11.0, rules=RULES)[1] for recognition in (
+        Recognition(unconfirmed_phrase="next", heard="next", free_text="alpha beta gamma"),
+        Recognition(refused_phrase="next", heard="next", free_text="alpha beta gamma"),
+        Recognition(unrecognized_text="left net", heard="left net", free_text="alpha beta gamma"),
+        Recognition(unrecognized_text="alpha beta gamma"),
+    )]
 
-    assert outcome_line(_heard(doubted), now=11.0, rules=RULES) == (
-        logging.INFO, "Voice: heard 'next' but the second engine read 'and then' (peak 2000)")
+    assert lines == [
+        "Voice: heard 'next' but the second engine read 3 words (peak 2000)",
+        ("Voice: heard 'next' but its confidence was under 0.70 "
+         "(unrestricted reading 3 words, peak 2000)"),
+        "Unrecognized speech: 'left net' (unrestricted reading 3 words, peak 2000)",
+        "Unrecognized speech: '' (unrestricted reading 3 words, peak 2000)",
+    ]
