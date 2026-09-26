@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+import time
 from collections.abc import Callable
 from functools import partial
 from typing import Any
@@ -50,10 +51,12 @@ class WhisperReader:
     lifted to full level and whisper skips what is not speech, which is what steadied sentences.
     """
 
-    def __init__(self, *, load: Callable[[], Any] | None = None, for_dictation: bool = False) -> None:
+    def __init__(self, *, load: Callable[[], Any] | None = None, for_dictation: bool = False,
+                 clock: Callable[[], float] = time.monotonic) -> None:
         size = DICTATION_MODEL if for_dictation else COMMAND_MODEL
         self._load = load or partial(load_faster_whisper, size)
         self._for_dictation = for_dictation
+        self._clock = clock
         self._model = None
         self._loading = threading.Lock()
 
@@ -75,7 +78,9 @@ class WhisperReader:
 
     def _load_once(self) -> None:
         if self._model is None:
+            began = self._clock()
             self._model = self._load()
+            logger.info("Voice: whisper loaded in %.1fs", self._clock() - began)
 
     def __call__(self, pcm: bytes, hint: str) -> str:
         self.preload()
