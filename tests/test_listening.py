@@ -104,6 +104,16 @@ def test_the_stretch_a_phrase_was_said_in_is_kept_for_the_second_engine_with_a_m
     assert heard.audio == VOICED * 40 + QUIET + QUIET
 
 
+def test_a_phrase_said_at_the_end_of_a_long_utterance_is_dated_from_its_own_first_word():
+    utterance_starts_on_the_stream_at, said_from = A_FRAME, 0.90
+    recognizer = _Recognizer(_timed(("next", utterance_starts_on_the_stream_at + said_from,
+                                     utterance_starts_on_the_stream_at + 1.20)))
+
+    [heard] = _feed(_listening(recognizer), [QUIET, *[VOICED] * 40, QUIET, QUIET])
+
+    assert heard.spoken_at == pytest.approx(SPOKEN_AT + said_from)
+
+
 def test_what_the_recognizer_read_of_the_room_is_cleared_where_the_speaker_starts():
     recognizer = _Recognizer(_ranked("next"))
 
