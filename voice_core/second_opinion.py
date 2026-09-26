@@ -35,16 +35,33 @@ def _numbers_as_digits(words: Sequence[str]) -> list[str]:
     return out
 
 
+_WHAT_A_MICROPHONE_CLICK_IS_READ_AS = frozenset({"the", "and", "a", "uh", "um", "oh"})
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z]+|\d+", text.lower())
+
+
 def _squashed(text: str) -> str:
-    return "".join(_numbers_as_digits(re.findall(r"[a-z]+|\d+", text.lower())))
+    return "".join(_numbers_as_digits(_words(text)))
+
+
+def _without_clicks(text: str) -> str:
+    words = _words(text)
+    while words and words[0] in _WHAT_A_MICROPHONE_CLICK_IS_READ_AS:
+        words = words[1:]
+    while words and words[-1] in _WHAT_A_MICROPHONE_CLICK_IS_READ_AS:
+        words = words[:-1]
+    return " ".join(words)
 
 
 def chosen_among(reading: str, candidates: Sequence[str], *,
                  written: Callable[[str], str | None] | None = None) -> str | None:
-    heard = _squashed(reading)
+    readings = {_squashed(reading), _squashed(_without_clicks(reading))}
     for phrase in candidates:
-        spellings = (phrase, written(phrase) if written else None)
-        if any(_is_repeated(heard, _squashed(spelling)) for spelling in spellings if spelling):
+        spellings = [_squashed(spelling) for spelling in (phrase, written(phrase) if written else None)
+                     if spelling]
+        if any(_is_repeated(heard, said) for heard in readings for said in spellings):
             return phrase
     return None
 

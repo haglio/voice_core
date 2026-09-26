@@ -21,6 +21,12 @@ def test_a_phrase_the_engine_repeated_is_still_that_phrase():
     assert chosen_among("left next, left next, left next.", ("left next",)) == "left next"
 
 
+def test_the_word_a_microphone_click_became_at_either_end_of_a_reading_is_no_part_of_it():
+    assert chosen_among("And enter VR.", ("enter vr",)) == "enter vr"
+    assert chosen_among("The next, uh", ("next",)) == "next"
+    assert chosen_among("Go next.", ("next",)) is None
+
+
 def test_a_number_written_in_digits_is_the_number_said_in_words():
     assert chosen_among("Amp 50", ("amp fifty", "amp fifteen")) == "amp fifty"
     assert chosen_among("clip seconds 25", ("clip seconds twenty five",)) == "clip seconds twenty five"
