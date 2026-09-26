@@ -80,6 +80,15 @@ def test_the_second_engine_reads_only_the_stretch_the_first_heard_the_phrase_in(
     assert asked == [AUDIO[:4]]
 
 
+def test_a_phrase_the_second_engine_could_not_read_as_recorded_is_listened_to_again_closer():
+    heard = _heard(Recognition(phrase="next", heard="next"), {"next": 0})
+
+    settled = settle(heard, rules=RULES, read=lambda audio, hint: "",
+                     read_closely=lambda audio, hint: "Next.")
+
+    assert settled == heard
+
+
 def test_a_first_choice_the_second_engine_reads_otherwise_is_not_acted_on():
     heard = _heard(Recognition(phrase="next", heard="next"), {"next": 0})
 

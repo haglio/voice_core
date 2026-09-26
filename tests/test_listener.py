@@ -340,6 +340,22 @@ def test_the_stretch_the_second_engine_reads_is_measured_at_the_microphones_own_
     assert one.phrase_audio == one.audio[round((1.0 - PHRASE_MARGIN_S) * rate) * 2:]
 
 
+def test_a_second_engine_that_can_listen_closer_does_when_its_first_reading_chose_nothing():
+    heard = []
+
+    class _Reader:
+        def __call__(self, audio, hint):
+            return ""
+
+        def read_closely(self, audio, hint):
+            return hint
+
+    _listener(heard=heard.append, engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
+                                                  second_opinion=_Reader())).run()
+
+    assert [one.recognition.phrase for one in heard] == ["next"]
+
+
 def test_a_second_engine_has_finished_loading_before_the_first_utterance_is_put_to_it():
     order = []
 
