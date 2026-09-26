@@ -146,7 +146,7 @@ def outcome_line(heard: Heard, *, now: float, rules: CommandRules) -> tuple[int,
             f"Voice: heard {recognition.refused_phrase!r} but its confidence was under "
             f"{rules.confidence_threshold:.2f} (unrestricted reading {unrestricted}, peak {peak})")
     if recognition.unrecognized_text:
-        return logging.INFO, (f"Unrecognized speech: {recognition.heard or ''!r} "
+        return logging.INFO, (f"Unrecognized speech: {_length(recognition.heard)} "
                               f"(unrestricted reading {unrestricted}, peak {peak})")
     if recognition.silent_reading:
         return logging.INFO, (
