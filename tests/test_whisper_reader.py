@@ -87,6 +87,15 @@ def test_a_load_ahead_that_failed_is_tried_again_by_the_first_reading(caplog):
     assert "the disk was busy" in caplog.text
 
 
+def test_how_long_whisper_took_to_load_is_logged(caplog):
+    ticks = iter([10.0, 12.5])
+
+    with caplog.at_level(logging.INFO, logger="voice_core.whisper_reader"):
+        WhisperReader(load=_Model, clock=lambda: next(ticks)).preload()
+
+    assert "whisper loaded in 2.5s" in caplog.text
+
+
 def test_with_no_hint_whisper_is_given_no_prompt_at_all():
     model = _Model("anything at all")
 
