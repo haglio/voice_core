@@ -45,9 +45,14 @@ why nothing else counts):
 Vosk takes a phrase list of any length and reads a cough as a one-word command.
 Whisper's prompt holds 223 tokens and drags ordinary speech onto whatever it names.
 So vosk proposes -- every phrase among its five ranked readings is a candidate -- and
-whisper, prompted with just that utterance's candidates, picks one or refuses them all
-(`second_opinion.settle`). `CommandRules.stands_alone` names the phrases an app wants
-acted on without that half-second wait.
+whisper, prompted with just that utterance's candidates and handed only the stretch of it
+vosk heard them in, picks one or refuses them all; before refusing, it reads the stretch
+again lifted to full level, where it may not call anything silence
+(`second_opinion.settle`). Over 1,196 utterances of the owner's ordinary dictation that let
+14 through where one reading of the whole utterance let 12, and it read the command in 4 of
+11 kept clips of commands the one reading had doubted, against 2.
+`CommandRules.stands_alone` names the phrases an app wants acted on without that
+half-second wait.
 
 Without `Engines.second_opinion` the listener is vosk alone, with the guards Fun Time
 grew: a lower-ranked reading is taken only when it shares a word with the first and the
