@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 UNKNOWN = "[unk]"
 
@@ -36,6 +36,7 @@ class Hypothesis:
     text: str
     # Empty when vosk ranks whole readings: unscored, never zero.
     confidences: tuple[float, ...] = ()
+    times: tuple[tuple[float, float], ...] = field(default=(), compare=False)
 
 
 def hypotheses(raw_json: str) -> list[Hypothesis]:
@@ -45,5 +46,11 @@ def hypotheses(raw_json: str) -> list[Hypothesis]:
         text = reading.get("text", "").strip()
         if text:
             words = reading.get("result") or []
-            found.append(Hypothesis(text, tuple(w["conf"] for w in words if "conf" in w)))
+            found.append(Hypothesis(text, tuple(w["conf"] for w in words if "conf" in w),
+                                    _times_of(words, count=len(text.split()))))
     return found
+
+
+def _times_of(words: list[dict], *, count: int) -> tuple[tuple[float, float], ...]:
+    times = tuple((w["start"], w["end"]) for w in words if "start" in w and "end" in w)
+    return times if len(times) == count else ()

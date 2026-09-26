@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from voice_core.capture import CaptureLevel
-from voice_core.commands import CommandRules, Recognition, candidates, interpret
+from voice_core.commands import CommandRules, Recognition, candidates, interpret, where_said
 from voice_core.pauses import PauseSegmenter
 from voice_core.readings import UNKNOWN, hypotheses, joined, partial_text
+
+PHRASE_MARGIN_S = 0.3
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,7 @@ class Heard:
     audio: bytes
     # Every phrase among the ranked readings, with its rank: what a second engine may choose from.
     candidates: Mapping[str, int]
+    phrase_audio: bytes = b""
 
 
 @dataclass(frozen=True)
@@ -26,6 +29,7 @@ class Recognizers:
     grammar: Any
     # Reads the same audio with no phrase list, only to caption what the grammar one missed.
     unrestricted: Any = None
+    sample_rate: int = 16000
 
 
 class Listening:
@@ -38,9 +42,12 @@ class Listening:
         self._segmenter = segmenter
         self._on_partial = on_partial
         self._for_dictation = for_dictation
+        self._bytes_per_second = 2 * recognizers.sample_rate
         self._partial = ""
         self._level = CaptureLevel()
         self._began_at = 0.0
+        self._fed_seconds = 0.0
+        self._began_on_the_stream = 0.0
         self._settled_partway: list[str] = []
 
     def feed(self, data: bytes, *, started_at: float) -> Heard | None:
@@ -51,6 +58,7 @@ class Listening:
         self._level.note_block(data)
         if self._recognizer.AcceptWaveform(data):
             self._settled_partway.append(self._recognizer.Result())
+        self._fed_seconds += len(data) / self._bytes_per_second
         if utterance is not None:
             self._note_partial("")
             return self._heard(utterance)
@@ -63,6 +71,7 @@ class Listening:
 
     def _begin_utterance(self, *, at: float) -> None:
         self._began_at = at
+        self._began_on_the_stream = self._fed_seconds
         self._recognizer.Reset()
         self._level.take_utterance()
         self._settled_partway = []
@@ -79,8 +88,19 @@ class Listening:
         recognition = interpret(meant, "", rules=self._rules, peak=peak)
         if not recognition.phrase and self._unrestricted is not None:
             recognition = interpret(meant, self._caption(audio), rules=self._rules, peak=peak)
+        found = candidates(meant, rules=self._rules, peak=peak)
         return Heard(recognition, spoken_at=self._began_at, peak=peak, audio=audio,
-                     candidates=candidates(meant, rules=self._rules, peak=peak))
+                     candidates=found,
+                     phrase_audio=self._stretch_of(audio, where_said(meant, found, rules=self._rules)))
+
+    def _stretch_of(self, audio: bytes, span: tuple[float, float] | None) -> bytes:
+        if span is None:
+            return audio
+        start, end = (self._byte_at(span[0] - PHRASE_MARGIN_S), self._byte_at(span[1] + PHRASE_MARGIN_S))
+        return audio[max(start, 0):end]
+
+    def _byte_at(self, on_the_stream: float) -> int:
+        return round((on_the_stream - self._began_on_the_stream) * self._bytes_per_second / 2) * 2
 
     def _reading_meant(self, said: list[str], *, peak: int) -> str | None:
         if len(said) == 1:

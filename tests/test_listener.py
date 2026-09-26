@@ -24,6 +24,7 @@ from voice_core.listener import (
     RecognizerUnavailable,
     why_unavailable,
 )
+from voice_core.listening import PHRASE_MARGIN_S
 
 RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_rescued=lambda phrase: False)
 STALLED_FOR = 11.0
@@ -39,7 +40,7 @@ ITS_AUDIO = VOICED + VOICED + QUIET + QUIET
 class _Recognizer:
     def __init__(self, model, sample_rate, grammar=None, *, reading="next", settles_at=None):
         self.grammar = grammar
-        self._reading = reading
+        self._reading, *self._said_at = (reading,) if isinstance(reading, str) else reading
         self._settles_at = settles_at
         self.words = False
         self.alternatives = 0
@@ -56,7 +57,11 @@ class _Recognizer:
         return self.grammar is not None and self._fed == self._settles_at
 
     def Result(self):  # noqa: N802
-        return json.dumps({"alternatives": [{"text": self._reading, "confidence": 1.0}]})
+        reading = {"text": self._reading, "confidence": 1.0}
+        if self._said_at:
+            start, end = self._said_at
+            reading["result"] = [{"word": self._reading, "start": start, "end": end}]
+        return json.dumps({"alternatives": [reading]})
 
     def FinalResult(self):  # noqa: N802
         return self.Result() if self.grammar is not None else ""
@@ -321,6 +326,18 @@ def test_a_second_engine_that_fails_leaves_the_first_engines_word_standing(caplo
 
     assert [one.recognition.phrase for one in heard] == ["next"]
     assert "No module named 'faster_whisper'" in caplog.text
+
+
+def test_the_stretch_the_second_engine_reads_is_measured_at_the_microphones_own_rate():
+    rate, frame_seconds = 8000, FRAME / 8000
+    heard = []
+
+    _listener(settings=replace(SETTINGS, sample_rate=rate), heard=heard.append,
+              engines=Engines(_vosk([], reading=("next", frame_seconds + 1.0, frame_seconds + 1.2)),
+                              _sounddevice([], [QUIET, *[VOICED] * 20, QUIET, QUIET]))).run()
+
+    [one] = heard
+    assert one.phrase_audio == one.audio[round((1.0 - PHRASE_MARGIN_S) * rate) * 2:]
 
 
 def test_a_second_engine_has_finished_loading_before_the_first_utterance_is_put_to_it():

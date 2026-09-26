@@ -8,6 +8,7 @@ from voice_core.commands import (
     Recognition,
     candidates,
     interpret,
+    where_said,
 )
 
 SPOKEN = 2000
@@ -159,6 +160,32 @@ def test_a_reading_that_is_no_phrase_is_reported_without_the_microphone_opening_
     heard = interpret(_ranked("the left net"), "", rules=RULES, peak=SPOKEN)
 
     assert heard == Recognition(unrecognized_text="left net", heard="left net")
+
+
+def _timed(*readings):
+    return json.dumps({"alternatives": [
+        {"text": " ".join(word for word, *_times in words), "confidence": 100.0 - rank,
+         "result": [{"word": word, "start": start, "end": end} for word, start, end in words]}
+        for rank, words in enumerate(readings)]})
+
+
+def test_a_phrase_was_said_from_its_first_word_to_its_last_leaving_the_microphone_opening_out():
+    raw = _timed([("the", 0.2, 9.0), ("left", 9.1, 9.4), ("next", 9.4, 9.8)])
+
+    assert where_said(raw, ["left next"], rules=RULES) == (9.1, 9.8)
+
+
+def test_several_phrases_were_said_across_the_stretch_that_holds_them_all():
+    raw = _timed([("next", 1.0, 1.3)], [("left", 0.7, 1.0), ("next", 1.0, 1.3)],
+                 [("skip", 2.0, 2.4)])
+
+    assert where_said(raw, ["next", "left next"], rules=RULES) == (0.7, 1.3)
+
+
+def test_where_a_phrase_was_said_is_unknown_when_its_words_carry_no_times():
+    untimed = json.dumps({"alternatives": [{"text": "left next", "confidence": 1.0}]})
+
+    assert where_said(untimed, ["left next"], rules=RULES) is None
 
 
 def test_what_was_heard_is_the_first_reading_with_words_left_in_it():

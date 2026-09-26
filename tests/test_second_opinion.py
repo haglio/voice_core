@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import Mock
 
 from voice_core.commands import CommandRules, Recognition
@@ -67,6 +68,16 @@ def test_a_first_choice_the_second_engine_also_reads_is_the_command():
 
     assert settled == heard
     assert asked == [(AUDIO, "next, lock")]
+
+
+def test_the_second_engine_reads_only_the_stretch_the_first_heard_the_phrase_in():
+    heard = replace(_heard(Recognition(phrase="next", heard="next"), {"next": 0}),
+                    phrase_audio=AUDIO[:4])
+    asked = []
+
+    settle(heard, rules=RULES, read=lambda audio, hint: asked.append(audio) or "Next.")
+
+    assert asked == [AUDIO[:4]]
 
 
 def test_a_first_choice_the_second_engine_reads_otherwise_is_not_acted_on():

@@ -41,6 +41,21 @@ def test_ranked_readings_come_best_first_and_unscored():
         Hypothesis("left net"), Hypothesis("left next")]
 
 
+def test_each_word_of_a_reading_comes_with_when_it_was_said():
+    raw = json.dumps({"alternatives": [{"text": "left next", "confidence": 1.0, "result": [
+        {"word": "left", "start": 1.5, "end": 1.8}, {"word": "next", "start": 1.8, "end": 2.2}]}]})
+
+    [reading] = hypotheses(raw)
+
+    assert reading.times == ((1.5, 1.8), (1.8, 2.2))
+
+
+def test_a_reading_whose_words_carry_no_times_has_none():
+    [reading] = hypotheses(json.dumps({"alternatives": [{"text": "left next", "confidence": 1.0}]}))
+
+    assert reading.times == ()
+
+
 def test_a_reading_with_no_words_in_it_is_no_reading():
     assert hypotheses(_ranked("", "next")) == [Hypothesis("next")]
     assert hypotheses(json.dumps({"text": "  "})) == []
