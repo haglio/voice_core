@@ -257,12 +257,12 @@ def test_a_command_is_logged_with_how_long_ago_it_was_spoken_and_how_loud():
         logging.INFO, "Voice command: 'next' (spoken 1.25s before recognition, peak 2000)")
 
 
-def test_a_repair_is_logged_beside_the_reading_it_was_taken_from_under():
+def test_a_repair_is_logged_beside_the_length_of_the_reading_it_was_taken_from_under():
     _, line = outcome_line(_heard(Recognition(phrase="left next", rank=1, heard="left net")),
                            now=11.0, rules=RULES)
 
-    assert line == ("Voice command: 'left next' -- the recognizer's choice 2, under 'left net', "
-                    "which is no command (spoken 1.00s before recognition, peak 2000)")
+    assert line == ("Voice command: 'left next' -- the recognizer's choice 2, under a 2-word "
+                    "reading, which is no command (spoken 1.00s before recognition, peak 2000)")
 
 
 def test_every_way_of_not_being_a_command_is_logged_under_its_own_name():
@@ -274,15 +274,15 @@ def test_every_way_of_not_being_a_command_is_logged_under_its_own_name():
     )]
 
     assert lines == [
-        (logging.INFO, ("Voice: heard 'next' but its confidence was under 0.70 "
+        (logging.INFO, ("Voice: heard a 1-word command but its confidence was under 0.70 "
                         "(unrestricted reading 1 word, peak 2000)")),
         (logging.INFO, "Unrecognized speech: 2 words (unrestricted reading 0 words, peak 2000)"),
-        (logging.INFO, "Voice: ignored 'half' read from silence (peak 2000)"),
+        (logging.INFO, "Voice: ignored 1 word read from silence (peak 2000)"),
         (logging.DEBUG, "Voice: an utterance ended with nothing in it (peak 2000)"),
     ]
 
 
-def test_what_an_unrestricted_engine_read_is_logged_by_its_length_never_its_words():
+def test_what_was_heard_and_not_acted_on_is_logged_by_its_length_never_its_words():
     lines = [outcome_line(_heard(recognition), now=11.0, rules=RULES)[1] for recognition in (
         Recognition(unconfirmed_phrase="next", heard="next", free_text="alpha beta gamma"),
         Recognition(refused_phrase="next", heard="next", free_text="alpha beta gamma"),
@@ -291,8 +291,8 @@ def test_what_an_unrestricted_engine_read_is_logged_by_its_length_never_its_word
     )]
 
     assert lines == [
-        "Voice: heard 'next' but the second engine read 3 words (peak 2000)",
-        ("Voice: heard 'next' but its confidence was under 0.70 "
+        "Voice: heard a 1-word command but the second engine read 3 words (peak 2000)",
+        ("Voice: heard a 1-word command but its confidence was under 0.70 "
          "(unrestricted reading 3 words, peak 2000)"),
         "Unrecognized speech: 2 words (unrestricted reading 3 words, peak 2000)",
         "Unrecognized speech: 0 words (unrestricted reading 3 words, peak 2000)",
