@@ -54,14 +54,20 @@ def _is_repeated(heard: str, said: str) -> bool:
     return bool(heard and said) and heard == said * (len(heard) // len(said))
 
 
-def settle(heard: Heard, *, rules: CommandRules, read: Callable[[bytes, str], str]) -> Heard:
+def settle(heard: Heard, *, rules: CommandRules, read: Callable[[bytes, str], str],
+           read_closely: Callable[[bytes, str], str] | None = None) -> Heard:
     first = heard.recognition
     stands_alone = bool(first.phrase and rules.stands_alone and rules.stands_alone(first.phrase))
     if stands_alone or not heard.candidates:
         return heard
-    reading = read(heard.phrase_audio or heard.audio, ", ".join(
-        (rules.written and rules.written(phrase)) or phrase for phrase in heard.candidates))
+    audio = heard.phrase_audio or heard.audio
+    hint = ", ".join(
+        (rules.written and rules.written(phrase)) or phrase for phrase in heard.candidates)
+    reading = read(audio, hint)
     chosen = chosen_among(reading, tuple(heard.candidates), written=rules.written)
+    if chosen is None and read_closely is not None:
+        reading = read_closely(audio, hint)
+        chosen = chosen_among(reading, tuple(heard.candidates), written=rules.written)
     if chosen is None:
         return replace(heard, recognition=replace(
             first, phrase=None, rank=0, unconfirmed_phrase=first.phrase, free_text=reading))

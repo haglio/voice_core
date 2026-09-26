@@ -83,11 +83,17 @@ class WhisperReader:
             logger.info("Voice: whisper loaded in %.1fs", self._clock() - began)
 
     def __call__(self, pcm: bytes, hint: str) -> str:
+        return self._read(pcm, hint, lifted=self._for_dictation, vad_filter=self._for_dictation)
+
+    def read_closely(self, pcm: bytes, hint: str) -> str:
+        return self._read(pcm, hint, lifted=True, vad_filter=False, no_speech_threshold=None)
+
+    def _read(self, pcm: bytes, hint: str, *, lifted: bool, **whisper_options: Any) -> str:
         self.preload()
         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-        if self._for_dictation:
+        if lifted:
             audio = audio / max(float(np.max(np.abs(audio), initial=0.0)), _SILENCE) * _FULL_LEVEL
         segments, _ = self._model.transcribe(
             audio, language="en", initial_prompt=hint or None,
-            vad_filter=self._for_dictation, condition_on_previous_text=False)
+            condition_on_previous_text=False, **whisper_options)
         return " ".join(part for part in (segment.text.strip() for segment in segments) if part)

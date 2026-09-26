@@ -193,7 +193,8 @@ class CommandListener:
         if self._second_opinion is None:
             return heard
         try:
-            return settle(heard, rules=self._rules, read=self._second_opinion)
+            return settle(heard, rules=self._rules, read=self._second_opinion,
+                          read_closely=getattr(self._second_opinion, "read_closely", None))
         except Exception:
             logger.exception("Voice: the second engine failed; the first engine's word stands")
             return heard

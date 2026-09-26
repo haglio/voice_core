@@ -114,6 +114,16 @@ def test_a_reader_for_dictation_lifts_a_quiet_microphone_and_lets_whisper_skip_w
     assert options["vad_filter"] is True
 
 
+def test_a_closer_reading_lifts_a_quiet_microphone_and_lets_whisper_call_nothing_silence():
+    model = _Model("next")
+
+    WhisperReader(load=lambda: model).read_closely(QUIET_PCM, "next")
+
+    [(samples, options)] = model.asked
+    assert samples == pytest.approx([0.0, 0.95, -0.95, 0.0])
+    assert (options["no_speech_threshold"], options["vad_filter"]) == (None, False)
+
+
 def test_a_reader_for_commands_leaves_the_audio_as_it_was_recorded():
     model = _Model("next")
 
