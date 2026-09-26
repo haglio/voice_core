@@ -108,12 +108,15 @@ class CommandListener:
         self._clock = engines.clock
         self._second_opinion = engines.second_opinion
         self._take_down = engines.take_down
+        self._second_engines = tuple(engine for engine in (engines.second_opinion, engines.take_down)
+                                     if engine is not None)
         self._stop = threading.Event()
 
     def stop(self) -> None:
         self._stop.set()
 
     def run(self) -> None:
+        self._start_loading_the_second_engines()
         try:
             self._vosk = self._vosk or importlib.import_module("vosk")
             self._sounddevice = self._sounddevice or importlib.import_module("sounddevice")
@@ -152,13 +155,13 @@ class CommandListener:
     def _delivery(self):
         """How a settled utterance reaches the app: at once, or -- a second engine taking
         its second over each -- from one thread of its own, in the order they were spoken."""
-        if self._second_opinion is None and self._take_down is None:
+        if not self._second_engines:
             yield self._deliver
             return
         waiting: queue.Queue[Heard | None] = queue.Queue()
 
         def in_order() -> None:
-            self._load_the_engines_ahead()
+            self._finish_loading_the_second_engines()
             while (heard := waiting.get()) is not None:
                 self._deliver(self._settled(heard))
 
@@ -170,8 +173,14 @@ class CommandListener:
             waiting.put(None)
             worker.join(timeout=SECOND_OPINION_PATIENCE_S)
 
-    def _load_the_engines_ahead(self) -> None:
-        for engine in (self._second_opinion, self._take_down):
+    def _start_loading_the_second_engines(self) -> None:
+        for engine in self._second_engines:
+            load_ahead = getattr(engine, "load_ahead", None)
+            if load_ahead is not None:
+                load_ahead()
+
+    def _finish_loading_the_second_engines(self) -> None:
+        for engine in self._second_engines:
             preload = getattr(engine, "preload", None)
             if preload is None:
                 continue
