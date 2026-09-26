@@ -133,27 +133,34 @@ def outcome_line(heard: Heard, *, now: float, rules: CommandRules) -> tuple[int,
     unrestricted = _length(recognition.free_text if recognition.heard
                            else recognition.unrecognized_text)
     if recognition.phrase:
-        repaired = (f" -- the recognizer's choice {recognition.rank + 1}, under "
-                    f"{recognition.heard!r}, which is no command" if recognition.rank else "")
+        repaired = (f" -- the recognizer's choice {recognition.rank + 1}, under a "
+                    f"{_count(recognition.heard)}-word reading, which is no command"
+                    if recognition.rank else "")
         return logging.INFO, (
             f"Voice command: {recognition.phrase!r}{repaired} "
             f"(spoken {now - heard.spoken_at:.2f}s before recognition, peak {peak})")
     if recognition.unconfirmed_phrase:
-        return logging.INFO, (f"Voice: heard {recognition.unconfirmed_phrase!r} but the second "
-                              f"engine read {unrestricted} (peak {peak})")
+        return logging.INFO, (
+            f"Voice: heard a {_count(recognition.unconfirmed_phrase)}-word command but the "
+            f"second engine read {unrestricted} (peak {peak})")
     if recognition.refused_phrase:
         return logging.INFO, (
-            f"Voice: heard {recognition.refused_phrase!r} but its confidence was under "
-            f"{rules.confidence_threshold:.2f} (unrestricted reading {unrestricted}, peak {peak})")
+            f"Voice: heard a {_count(recognition.refused_phrase)}-word command but its "
+            f"confidence was under {rules.confidence_threshold:.2f} "
+            f"(unrestricted reading {unrestricted}, peak {peak})")
     if recognition.unrecognized_text:
         return logging.INFO, (f"Unrecognized speech: {_length(recognition.heard)} "
                               f"(unrestricted reading {unrestricted}, peak {peak})")
     if recognition.silent_reading:
         return logging.INFO, (
-            f"Voice: ignored {recognition.silent_reading!r} read from silence (peak {peak})")
+            f"Voice: ignored {_length(recognition.silent_reading)} read from silence (peak {peak})")
     return logging.DEBUG, f"Voice: an utterance ended with nothing in it (peak {peak})"
 
 
+def _count(reading: str | None) -> int:
+    return len((reading or "").split())
+
+
 def _length(reading: str | None) -> str:
-    count = len((reading or "").split())
+    count = _count(reading)
     return f"{count} word{'' if count == 1 else 's'}"
