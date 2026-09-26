@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 import sys
+import threading
 from collections.abc import Callable
 from functools import partial
 from typing import Any
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 # Prompted with an utterance's own candidates, "base" chose as well as "small" on the owner's
 # recordings (7 of 10 missed commands either way, 3 against 9 invented in 930 utterances of
@@ -30,7 +34,12 @@ def load_faster_whisper(model_size: str):
     # On the CPU by design: the one GPU is for pictures and players. A reading took a median
     # 0.43 s on two threads, 0.33 s on four and 0.27 s on eight (this machine, 2026-09-18):
     # four is most of the gain and leaves the players their cores.
-    return WhisperModel(model_size, device="cpu", compute_type="int8", cpu_threads=4)
+    on_this_machine = partial(WhisperModel, model_size, device="cpu", compute_type="int8",
+                              cpu_threads=4)
+    try:
+        return on_this_machine(local_files_only=True)
+    except FileNotFoundError:
+        return on_this_machine(local_files_only=False)
 
 
 class WhisperReader:
@@ -46,8 +55,25 @@ class WhisperReader:
         self._load = load or partial(load_faster_whisper, size)
         self._for_dictation = for_dictation
         self._model = None
+        self._loading = threading.Lock()
+
+    def load_ahead(self) -> None:
+        threading.Thread(target=self._load_or_say_why_not, name="whisper-load-ahead",
+                         daemon=True).start()
 
     def preload(self) -> None:
+        with self._loading:
+            self._load_once()
+
+    def _load_or_say_why_not(self) -> None:
+        with self._loading:
+            try:
+                self._load_once()
+            except Exception:
+                logger.warning("Voice: whisper did not load ahead; the first reading tries again",
+                               exc_info=True)
+
+    def _load_once(self) -> None:
         if self._model is None:
             self._model = self._load()
 

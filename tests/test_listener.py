@@ -323,7 +323,7 @@ def test_a_second_engine_that_fails_leaves_the_first_engines_word_standing(caplo
     assert "No module named 'faster_whisper'" in caplog.text
 
 
-def test_a_second_engine_that_can_load_ahead_is_loaded_before_the_first_utterance_needs_it():
+def test_a_second_engine_has_finished_loading_before_the_first_utterance_is_put_to_it():
     order = []
 
     class _Reader:
@@ -338,6 +338,27 @@ def test_a_second_engine_that_can_load_ahead_is_loaded_before_the_first_utteranc
                               second_opinion=_Reader())).run()
 
     assert order == ["loaded", "asked"]
+
+
+def test_a_second_engine_starts_loading_before_the_first_engine_loads_its_model():
+    order = []
+
+    class _Reader:
+        def load_ahead(self):
+            order.append("second engine loading")
+
+        def preload(self):
+            pass
+
+        def __call__(self, audio, hint):
+            return hint
+
+    vosk = _vosk([])
+    vosk.Model = lambda model_name: order.append("first engine loading") or model_name
+
+    _listener(engines=Engines(vosk, _sounddevice([], A_COMMAND), second_opinion=_Reader())).run()
+
+    assert order == ["second engine loading", "first engine loading"]
 
 
 def test_an_utterance_that_is_no_command_is_taken_down_for_an_app_that_wants_speech():
