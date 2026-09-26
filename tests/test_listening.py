@@ -130,11 +130,40 @@ def test_an_utterance_is_dated_from_the_frame_the_speaker_was_first_heard_on():
 
 def test_the_words_forming_are_passed_on_as_they_change_while_the_speaker_is_heard():
     forming = []
-    recognizer = _Recognizer(_ranked("left next"), partials={2: "left", 3: "left next"})
+    recognizer = _Recognizer(_ranked("left next"), partials={3: "left", 4: "left next"})
 
-    _feed(_listening(recognizer, on_partial=forming.append), A_COMMAND)
+    _feed(_listening(recognizer, on_partial=forming.append),
+          [QUIET, VOICED, VOICED, VOICED, QUIET, QUIET])
 
     assert forming == ["left", "left next", ""]
+
+
+def test_words_are_said_to_stop_forming_only_where_the_utterance_ends():
+    forming = []
+    recognizer = _Recognizer(_ranked("left next"), partials={3: "left", 4: "", 5: "left next"})
+
+    _feed(_listening(recognizer, on_partial=forming.append),
+          [QUIET, VOICED, VOICED, VOICED, VOICED, QUIET, QUIET])
+
+    assert forming == ["left", "left next", ""]
+
+
+def test_an_utterance_says_whether_words_were_seen_forming_in_it():
+    frames = [QUIET, VOICED, VOICED, VOICED, QUIET, QUIET]
+
+    formed = _feed(_listening(_Recognizer(_ranked("next"), partials={3: "ne"})), frames)
+    unformed = _feed(_listening(_Recognizer(_ranked("next"))), frames)
+
+    assert [one.words_formed for one in formed + unformed] == [True, False]
+
+
+def test_a_sound_too_short_to_be_kept_is_never_called_words_forming():
+    forming = []
+    recognizer = _Recognizer(partials={2: "net"})
+
+    heard = _feed(_listening(recognizer, on_partial=forming.append), [QUIET, SHOUTED, QUIET, QUIET])
+
+    assert (heard, forming) == ([], [])
 
 
 def test_nothing_the_recognizer_reads_out_of_the_quiet_room_is_called_words_forming():

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from voice_core.capture import CaptureLevel
@@ -22,6 +22,7 @@ class Heard:
     # Every phrase among the ranked readings, with its rank: what a second engine may choose from.
     candidates: Mapping[str, int]
     phrase_audio: bytes = b""
+    words_formed: bool = False
 
 
 @dataclass(frozen=True)
@@ -60,10 +61,13 @@ class Listening:
             self._settled_partway.append(self._recognizer.Result())
         self._fed_seconds += len(data) / self._bytes_per_second
         if utterance is not None:
+            words_formed = bool(self._partial)
             self._note_partial("")
-            return self._heard(utterance)
-        if self._segmenter.speaking:
-            self._note_partial(partial_text(self._recognizer.PartialResult()))
+            return self._heard(utterance, words_formed=words_formed)
+        if self._segmenter.speaking and self._segmenter.holds_speech:
+            forming = partial_text(self._recognizer.PartialResult())
+            if forming:
+                self._note_partial(forming)
         return None
 
     def take_recent_level(self) -> int:
@@ -76,27 +80,26 @@ class Listening:
         self._level.take_utterance()
         self._settled_partway = []
 
-    def _heard(self, audio: bytes) -> Heard:
-        peak = self._level.take_utterance()
+    def _heard(self, audio: bytes, *, words_formed: bool) -> Heard:
+        heard = Heard(Recognition(), spoken_at=self._began_at, peak=self._level.take_utterance(),
+                      audio=audio, candidates={}, phrase_audio=audio, words_formed=words_formed)
         readings = [*self._settled_partway, self._recognizer.FinalResult()]
         said = [ranked for ranked in readings if _first_choice(ranked)] or readings[-1:]
-        meant = self._reading_meant(said, peak=peak)
+        meant = self._reading_meant(said, peak=heard.peak)
         if meant is None:
             talk = " ".join(map(_first_choice, said))
-            return Heard(Recognition(unrecognized_text=talk, heard=talk),
-                         spoken_at=self._began_at, peak=peak, audio=audio, candidates={})
-        recognition = interpret(meant, "", rules=self._rules, peak=peak)
+            return replace(heard, recognition=Recognition(unrecognized_text=talk, heard=talk))
+        recognition = interpret(meant, "", rules=self._rules, peak=heard.peak)
         if not recognition.phrase and self._unrestricted is not None:
-            recognition = interpret(meant, self._caption(audio), rules=self._rules, peak=peak)
-        found = candidates(meant, rules=self._rules, peak=peak)
+            recognition = interpret(meant, self._caption(audio), rules=self._rules, peak=heard.peak)
+        found = candidates(meant, rules=self._rules, peak=heard.peak)
+        heard = replace(heard, recognition=recognition, candidates=found)
         span = where_said(meant, found, rules=self._rules)
         if span is None:
-            return Heard(recognition, spoken_at=self._began_at, peak=peak, audio=audio,
-                         candidates=found, phrase_audio=audio)
-        into_the_utterance = span[0] - self._began_on_the_stream
+            return heard
         start, end = (self._byte_at(span[0] - PHRASE_MARGIN_S), self._byte_at(span[1] + PHRASE_MARGIN_S))
-        return Heard(recognition, spoken_at=self._began_at + into_the_utterance, peak=peak,
-                     audio=audio, candidates=found, phrase_audio=audio[max(start, 0):end])
+        return replace(heard, spoken_at=self._began_at + (span[0] - self._began_on_the_stream),
+                       phrase_audio=audio[max(start, 0):end])
 
     def _byte_at(self, on_the_stream: float) -> int:
         return round((on_the_stream - self._began_on_the_stream) * self._bytes_per_second / 2) * 2

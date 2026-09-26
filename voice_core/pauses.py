@@ -49,6 +49,10 @@ class PauseSegmenter:
     def speaking(self) -> bool:
         return bool(self._frames)
 
+    @property
+    def holds_speech(self) -> bool:
+        return self._speech_frames >= self._min_speech_frames
+
     def push(self, frame: bytes) -> bytes | None:
         level = loudness(frame)
         if self._room is None:
@@ -74,6 +78,6 @@ class PauseSegmenter:
         return len(self._frames) >= self._longest_frames
 
     def _take(self) -> bytes | None:
-        utterance, spoken = b"".join(self._frames), self._speech_frames
+        utterance = b"".join(self._frames) if self.holds_speech else None
         self._frames, self._speech_frames, self._quiet_run = [], 0, 0
-        return utterance if spoken >= self._min_speech_frames else None
+        return utterance
