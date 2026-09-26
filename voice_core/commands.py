@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 
 from voice_core.readings import UNKNOWN, Hypothesis, hypotheses
@@ -71,18 +71,29 @@ _THE_MICROPHONE_OPENING = "the"
 def _as_said(readings: Sequence[Hypothesis], rules: CommandRules) -> list[Hypothesis]:
     """The readings without the microphone's opening at either end, rank for rank: one that
     was nothing else is kept as an empty place, so a phrase under it is still a repair."""
-    return [reading if reading.text in rules.phrases
-            else replace(reading, text=_without_the_opening(reading.text))
+    return [reading if reading.text in rules.phrases else _without_the_opening(reading)
             for reading in readings]
 
 
-def _without_the_opening(text: str) -> str:
-    words = text.split()
-    while words and words[0] == _THE_MICROPHONE_OPENING:
-        words = words[1:]
-    while words and words[-1] == _THE_MICROPHONE_OPENING:
-        words = words[:-1]
-    return " ".join(words)
+def _without_the_opening(reading: Hypothesis) -> Hypothesis:
+    words = reading.text.split()
+    first, last = 0, len(words)
+    while first < last and words[first] == _THE_MICROPHONE_OPENING:
+        first += 1
+    while last > first and words[last - 1] == _THE_MICROPHONE_OPENING:
+        last -= 1
+    return replace(reading, text=" ".join(words[first:last]), times=reading.times[first:last])
+
+
+def where_said(grammar_json: str, phrases: Iterable[str], *,
+               rules: CommandRules) -> tuple[float, float] | None:
+    wanted = set(phrases)
+    spans = [(reading.times[0][0], reading.times[-1][1])
+             for reading in _as_said(hypotheses(grammar_json), rules)
+             if reading.text in wanted and reading.times]
+    if not spans:
+        return None
+    return min(start for start, _end in spans), max(end for _start, end in spans)
 
 
 def _shares_a_word(reading: str, first_choice: str) -> bool:

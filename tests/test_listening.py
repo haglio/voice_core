@@ -7,7 +7,7 @@ import logging
 import pytest
 
 from voice_core.commands import CommandRules, Recognition
-from voice_core.listening import Heard, Listening, Recognizers, outcome_line
+from voice_core.listening import PHRASE_MARGIN_S, Heard, Listening, Recognizers, outcome_line
 from voice_core.pauses import PauseSegmenter, PauseSettings
 
 RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_rescued=lambda phrase: False)
@@ -78,7 +78,30 @@ def test_an_utterance_ends_where_the_speaker_pauses_and_the_recognizer_finishes_
 
     assert heard == [Heard(Recognition(phrase="left next", heard="left next"),
                            spoken_at=SPOKEN_AT, peak=LOUD,
-                           audio=VOICED + VOICED + QUIET + QUIET, candidates={"left next": 0})]
+                           audio=VOICED + VOICED + QUIET + QUIET, candidates={"left next": 0},
+                           phrase_audio=VOICED + VOICED + QUIET + QUIET)]
+
+
+def _timed(*words):
+    return json.dumps({"alternatives": [{
+        "text": " ".join(word for word, *_times in words), "confidence": 1.0,
+        "result": [{"word": word, "start": start, "end": end} for word, start, end in words]}]})
+
+
+def test_the_stretch_a_phrase_was_said_in_is_kept_for_the_second_engine_with_a_margin():
+    utterance_starts_on_the_stream_at = A_FRAME
+    said_from, said_to = 0.90, 1.20
+    recognizer = _Recognizer(_timed(
+        ("left", utterance_starts_on_the_stream_at + said_from,
+         utterance_starts_on_the_stream_at + 1.05),
+        ("next", utterance_starts_on_the_stream_at + 1.05,
+         utterance_starts_on_the_stream_at + said_to)))
+
+    [heard] = _feed(_listening(recognizer), [QUIET, *[VOICED] * 40, QUIET, QUIET])
+
+    frames_before_the_margin = round((said_from - PHRASE_MARGIN_S) / A_FRAME)
+    assert heard.phrase_audio == VOICED * (40 - frames_before_the_margin) + QUIET + QUIET
+    assert heard.audio == VOICED * 40 + QUIET + QUIET
 
 
 def test_what_the_recognizer_read_of_the_room_is_cleared_where_the_speaker_starts():

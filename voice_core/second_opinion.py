@@ -59,7 +59,7 @@ def settle(heard: Heard, *, rules: CommandRules, read: Callable[[bytes, str], st
     stands_alone = bool(first.phrase and rules.stands_alone and rules.stands_alone(first.phrase))
     if stands_alone or not heard.candidates:
         return heard
-    reading = read(heard.audio, ", ".join(
+    reading = read(heard.phrase_audio or heard.audio, ", ".join(
         (rules.written and rules.written(phrase)) or phrase for phrase in heard.candidates))
     chosen = chosen_among(reading, tuple(heard.candidates), written=rules.written)
     if chosen is None:

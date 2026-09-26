@@ -246,7 +246,7 @@ class CommandListener:
         if self._settings.caption_misses:
             unrestricted = self._vosk.KaldiRecognizer(model, sample_rate)
             unrestricted.SetWords(True)
-        return Listening(self._rules, Recognizers(recognizer, unrestricted),
+        return Listening(self._rules, Recognizers(recognizer, unrestricted, sample_rate),
                          PauseSegmenter(self._settings.pauses), on_partial=self._events.partial,
                          for_dictation=self._takes_dictation())
 
