@@ -89,15 +89,14 @@ class Listening:
         if not recognition.phrase and self._unrestricted is not None:
             recognition = interpret(meant, self._caption(audio), rules=self._rules, peak=peak)
         found = candidates(meant, rules=self._rules, peak=peak)
-        return Heard(recognition, spoken_at=self._began_at, peak=peak, audio=audio,
-                     candidates=found,
-                     phrase_audio=self._stretch_of(audio, where_said(meant, found, rules=self._rules)))
-
-    def _stretch_of(self, audio: bytes, span: tuple[float, float] | None) -> bytes:
+        span = where_said(meant, found, rules=self._rules)
         if span is None:
-            return audio
+            return Heard(recognition, spoken_at=self._began_at, peak=peak, audio=audio,
+                         candidates=found, phrase_audio=audio)
+        into_the_utterance = span[0] - self._began_on_the_stream
         start, end = (self._byte_at(span[0] - PHRASE_MARGIN_S), self._byte_at(span[1] + PHRASE_MARGIN_S))
-        return audio[max(start, 0):end]
+        return Heard(recognition, spoken_at=self._began_at + into_the_utterance, peak=peak,
+                     audio=audio, candidates=found, phrase_audio=audio[max(start, 0):end])
 
     def _byte_at(self, on_the_stream: float) -> int:
         return round((on_the_stream - self._began_on_the_stream) * self._bytes_per_second / 2) * 2
