@@ -191,3 +191,22 @@ def test_a_torch_something_else_already_imported_is_left_alone(monkeypatch):
     load_faster_whisper("base")
 
     assert sys.modules["torch"] is already
+
+
+def test_a_reader_for_another_language_reads_in_it():
+    model = _Model("Genau.")
+
+    WhisperReader(load=lambda: model, language="de")(QUIET_PCM, "Genau.")
+
+    assert model.asked[0][1]["language"] == "de"
+
+
+def test_a_reader_for_another_language_loads_the_model_that_read_his_german(monkeypatch):
+    sizes = []
+    monkeypatch.setattr("voice_core.whisper_reader.load_faster_whisper",
+                        lambda size: sizes.append(size) or _Model(""))
+
+    WhisperReader(language="de").preload()
+    WhisperReader().preload()
+
+    assert sizes == ["small", "base"]

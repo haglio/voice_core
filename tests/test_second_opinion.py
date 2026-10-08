@@ -143,3 +143,71 @@ def test_the_second_engine_is_shown_each_phrase_as_the_app_writes_it():
     settled = settle(heard, rules=rules, read=lambda audio, hint: hints.append(hint) or "Genau.")
 
     assert (hints, settled.recognition.phrase) == (["genau"], "go now")
+
+
+def _rules_with_genau_said_in_german():
+    return CommandRules(
+        phrases=frozenset({"go now", "go now mode", "next"}), never_rescued=RULES.never_rescued,
+        written={"go now": "genau", "go now mode": "genau mode"}.get,
+        said_in={"go now": "de", "go now mode": "de"}.get)
+
+
+def test_a_phrase_said_in_another_language_that_english_turned_down_is_read_again_in_its_own():
+    heard = _heard(Recognition(phrase="go now mode", heard="go now mode"), {"go now mode": 0})
+
+    settled = settle(heard, rules=_rules_with_genau_said_in_german(),
+                     read=lambda audio, hint: "Good night.",
+                     readers_in={"de": lambda audio, hint: "Genau Mode."})
+
+    assert settled == heard
+
+
+def test_a_phrase_said_in_english_is_never_read_again_in_another_language():
+    heard = _heard(Recognition(phrase="next", heard="next"), {"next": 0})
+
+    settled = settle(heard, rules=_rules_with_genau_said_in_german(),
+                     read=lambda audio, hint: "Good night.", readers_in={"de": _never_asked})
+
+    assert settled.recognition.unconfirmed_phrase == "next"
+
+
+def test_the_reader_in_another_language_is_handed_only_its_own_phrases_as_a_sentence():
+    heard = _heard(Recognition(phrase="next", heard="next"), {"next": 0, "go now mode": 1, "go now": 3})
+    hints = []
+
+    settle(heard, rules=_rules_with_genau_said_in_german(), read=lambda audio, hint: "",
+           readers_in={"de": lambda audio, hint: hints.append(hint) or ""})
+
+    assert hints == ["Genau mode, genau."]
+
+
+def test_a_word_two_spellings_write_alike_is_in_that_sentence_once():
+    rules = replace(_rules_with_genau_said_in_german(), phrases=frozenset({"go now mode", "genau mode"}),
+                    said_in={"go now mode": "de", "genau mode": "de"}.get)
+    heard = _heard(Recognition(phrase="go now mode", heard="go now mode"), {"go now mode": 0, "genau mode": 1})
+    hints = []
+
+    settle(heard, rules=rules, read=lambda audio, hint: "",
+           readers_in={"de": lambda audio, hint: hints.append(hint) or ""})
+
+    assert hints == ["Genau mode."]
+
+
+class _ReaderThatListensCloser:
+    def __init__(self, as_recorded, closer):
+        self.as_recorded, self.closer = as_recorded, closer
+
+    def __call__(self, audio, hint):
+        return self.as_recorded
+
+    def read_closely(self, audio, hint):
+        return self.closer
+
+
+def test_the_reader_in_another_language_listens_closer_before_it_turns_a_phrase_down():
+    heard = _heard(Recognition(phrase="go now", heard="go now"), {"go now": 0})
+
+    settled = settle(heard, rules=_rules_with_genau_said_in_german(), read=lambda audio, hint: "",
+                     readers_in={"de": _ReaderThatListensCloser("Guten Appetit.", "Genau.")})
+
+    assert settled == heard
