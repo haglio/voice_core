@@ -21,6 +21,11 @@ COMMAND_MODEL = "base"
 # dictation apps use, its worst quarter of 24 utterances came within 0.86 of it, base within 0.59.
 DICTATION_MODEL = "small"
 
+# Prompted in German, "small" read the owner's own "genau" as itself in all three kept clips of him
+# saying it, where "base" wrote "Guten Appetit" (2026-10-07), so a phrase said in another language
+# is read by it.
+OTHER_LANGUAGE_MODEL = "small"
+
 _FULL_LEVEL = 0.95
 _SILENCE = 1e-4
 
@@ -52,10 +57,12 @@ class WhisperReader:
     """
 
     def __init__(self, *, load: Callable[[], Any] | None = None, for_dictation: bool = False,
-                 clock: Callable[[], float] = time.monotonic) -> None:
-        size = DICTATION_MODEL if for_dictation else COMMAND_MODEL
+                 language: str = "en", clock: Callable[[], float] = time.monotonic) -> None:
+        size = (DICTATION_MODEL if for_dictation
+                else COMMAND_MODEL if language == "en" else OTHER_LANGUAGE_MODEL)
         self._load = load or partial(load_faster_whisper, size)
         self._for_dictation = for_dictation
+        self._language = language
         self._clock = clock
         self._model = None
         self._loading = threading.Lock()
@@ -94,6 +101,6 @@ class WhisperReader:
         if lifted:
             audio = audio / max(float(np.max(np.abs(audio), initial=0.0)), _SILENCE) * _FULL_LEVEL
         segments, _ = self._model.transcribe(
-            audio, language="en", initial_prompt=hint or None,
+            audio, language=self._language, initial_prompt=hint or None,
             condition_on_previous_text=False, **whisper_options)
         return " ".join(part for part in (segment.text.strip() for segment in segments) if part)

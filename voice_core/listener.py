@@ -5,7 +5,7 @@ import logging
 import queue
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
@@ -92,6 +92,8 @@ class Engines:
     clock: Callable[[], float] = time.monotonic
     # Reads an utterance's audio given a hint of phrases; see second_opinion.settle.
     second_opinion: Callable[[bytes, str], str] | None = None
+    # By language: reads a phrase said in it (CommandRules.said_in) that the second turned down.
+    second_opinion_in: Mapping[str, Callable[[bytes, str], str]] = field(default_factory=dict)
     # Reads an utterance's audio as ordinary speech, given the app's standing hint.
     take_down: Callable[[bytes, str], str] | None = None
 
@@ -107,9 +109,12 @@ class CommandListener:
         self._sounddevice = engines.sounddevice
         self._clock = engines.clock
         self._second_opinion = engines.second_opinion
+        self._second_opinion_in = dict(engines.second_opinion_in)
         self._take_down = engines.take_down
-        self._second_engines = tuple(engine for engine in (engines.second_opinion, engines.take_down)
-                                     if engine is not None)
+        self._second_engines = tuple(
+            engine for engine in (engines.second_opinion, engines.take_down,
+                                  *engines.second_opinion_in.values())
+            if engine is not None)
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -194,7 +199,8 @@ class CommandListener:
             return heard
         try:
             return settle(heard, rules=self._rules, read=self._second_opinion,
-                          read_closely=getattr(self._second_opinion, "read_closely", None))
+                          read_closely=getattr(self._second_opinion, "read_closely", None),
+                          readers_in=self._second_opinion_in)
         except Exception:
             logger.exception("Voice: the second engine failed; the first engine's word stands")
             return heard

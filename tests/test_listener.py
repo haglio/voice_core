@@ -101,7 +101,7 @@ SETTINGS = ListenerSettings(model_name="a-model", device_name="desk", poll_secon
                             pauses=PAUSES)
 
 
-def _listener(*, settings=SETTINGS, engines, keeps_misses=None, **events):
+def _listener(*, settings=SETTINGS, rules=RULES, engines, keeps_misses=None, **events):
     """A listener that stops itself at whichever event fires first."""
     def stopping(wanted=None):
         def event(*args):
@@ -111,7 +111,7 @@ def _listener(*, settings=SETTINGS, engines, keeps_misses=None, **events):
         return event
 
     listener = CommandListener(
-        RULES, settings,
+        rules, settings,
         ListenerEvents(**{"heard": stopping(), "keeps_misses": keeps_misses,
                           **{name: stopping(wanted) for name, wanted in events.items()}}),
         engines)
@@ -496,3 +496,23 @@ def _heard_by(*, an_app_taking_dictation):
 def test_a_breath_read_twice_is_talk_to_an_app_taking_dictation_and_a_command_to_any_other():
     assert _heard_by(an_app_taking_dictation=False).phrase == "next"
     assert _heard_by(an_app_taking_dictation=True).unrecognized_text == "next next"
+
+
+def test_a_phrase_said_in_another_language_is_read_in_it_by_the_engine_handed_in_for_it():
+    heard, order = [], []
+
+    class _German:
+        def preload(self):
+            order.append("loaded")
+
+        def __call__(self, audio, hint):
+            order.append(hint)
+            return "Next."
+
+    _listener(rules=replace(RULES, said_in={"next": "de"}.get), heard=heard.append,
+              engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
+                              second_opinion=lambda audio, hint: "and then",
+                              second_opinion_in={"de": _German()})).run()
+
+    assert order == ["loaded", "Next."]
+    assert [one.recognition.phrase for one in heard] == ["next"]

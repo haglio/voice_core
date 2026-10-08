@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 
 from voice_core.commands import CommandRules, Recognition
@@ -72,21 +72,52 @@ def _is_repeated(heard: str, said: str) -> bool:
 
 
 def settle(heard: Heard, *, rules: CommandRules, read: Callable[[bytes, str], str],
-           read_closely: Callable[[bytes, str], str] | None = None) -> Heard:
+           read_closely: Callable[[bytes, str], str] | None = None,
+           readers_in: Mapping[str, Callable[[bytes, str], str]] | None = None) -> Heard:
     first = heard.recognition
     stands_alone = bool(first.phrase and rules.stands_alone and rules.stands_alone(first.phrase))
     if stands_alone or not heard.candidates:
         return heard
     audio = heard.phrase_audio or heard.audio
-    hint = ", ".join(
-        (rules.written and rules.written(phrase)) or phrase for phrase in heard.candidates)
-    reading = read(audio, hint)
-    chosen = chosen_among(reading, tuple(heard.candidates), written=rules.written)
-    if chosen is None and read_closely is not None:
-        reading = read_closely(audio, hint)
-        chosen = chosen_among(reading, tuple(heard.candidates), written=rules.written)
+    candidates = tuple(heard.candidates)
+    chosen, reading = _first_chosen((read, read_closely), audio, ", ".join(_as_written(rules, candidates)),
+                                    candidates, rules)
+    if chosen is None and readers_in:
+        chosen = _chosen_in_their_own_language(audio, candidates, rules, readers_in)
     if chosen is None:
         return replace(heard, recognition=replace(
             first, phrase=None, rank=0, unconfirmed_phrase=first.phrase, free_text=reading))
     return replace(heard, recognition=Recognition(
         phrase=chosen, rank=heard.candidates[chosen], heard=first.heard))
+
+
+def _chosen_in_their_own_language(audio: bytes, candidates: Sequence[str], rules: CommandRules,
+                                  readers_in: Mapping[str, Callable[[bytes, str], str]]) -> str | None:
+    for language, read in readers_in.items():
+        theirs = tuple(phrase for phrase in candidates if rules.said_in and rules.said_in(phrase) == language)
+        if not theirs:
+            continue
+        hint = _as_a_sentence(", ".join(dict.fromkeys(_as_written(rules, theirs))))
+        chosen, _ = _first_chosen((read, getattr(read, "read_closely", None)), audio, hint, theirs, rules)
+        if chosen is not None:
+            return chosen
+    return None
+
+
+def _first_chosen(reads: Sequence[Callable[[bytes, str], str] | None], audio: bytes, hint: str,
+                  candidates: Sequence[str], rules: CommandRules) -> tuple[str | None, str]:
+    reading = ""
+    for read in filter(None, reads):
+        reading = read(audio, hint)
+        chosen = chosen_among(reading, candidates, written=rules.written)
+        if chosen is not None:
+            return chosen, reading
+    return None, reading
+
+
+def _as_written(rules: CommandRules, phrases: Sequence[str]) -> list[str]:
+    return [(rules.written and rules.written(phrase)) or phrase for phrase in phrases]
+
+
+def _as_a_sentence(words: str) -> str:
+    return f"{words[:1].upper()}{words[1:]}."

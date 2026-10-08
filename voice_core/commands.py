@@ -22,6 +22,8 @@ class CommandRules:
     # How the app writes a phrase it had to spell by sound for the grammar ("go now" for
     # a word the first engine lacks); None for a phrase written as it is said.
     written: Callable[[str], str | None] | None = None
+    # The language a phrase is said in when it is not English ("de" for a German word).
+    said_in: Callable[[str], str | None] | None = None
 
 
 @dataclass(frozen=True)
