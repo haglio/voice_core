@@ -281,6 +281,20 @@ def test_a_windowed_app_s_error_output_is_still_what_its_programs_inherit_once_v
     assert answer.read_text(encoding="utf-8") == "True started"
 
 
+def test_voice_imports_where_ctypes_carries_no_windows_half():
+    strips_the_windows_half_then_imports_voice = textwrap.dedent("""
+        import ctypes
+        for name in ("windll", "oledll", "WinDLL", "OleDLL", "WINFUNCTYPE", "HRESULT",
+                     "get_last_error", "set_last_error"):
+            if hasattr(ctypes, name):
+                delattr(ctypes, name)
+        import voice_core.listener
+    """)
+    result = subprocess.run([sys.executable, "-c", strips_the_windows_half_then_imports_voice],
+                            capture_output=True, text=True, timeout=60, check=False)
+    assert result.returncode == 0, result.stderr
+
+
 def _a_miss(tmp_path, **events):
     built = []
     engines = Engines(_vosk(built, reading="left net"), _sounddevice([], A_COMMAND))
