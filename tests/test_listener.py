@@ -4,10 +4,13 @@ import array
 import itertools
 import json
 import logging
+import subprocess
 import sys
+import textwrap
 import wave
 from contextlib import contextmanager
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -242,6 +245,40 @@ def test_why_voice_cannot_run_is_the_import_that_failed_or_nothing(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "sounddevice", None)
     assert "sounddevice" in why_unavailable()
+
+
+def test_a_windowed_app_s_error_output_is_still_what_its_programs_inherit_once_voice_loads(
+        tmp_path):
+    loads_voice_then_starts_a_program = tmp_path / "loads_voice_then_starts_a_program.py"
+    loads_voice_then_starts_a_program.write_text(textwrap.dedent("""
+        import ctypes
+        import msvcrt
+        import subprocess
+        import sys
+
+        from voice_core.listener import why_unavailable
+
+        why_unavailable()
+        kernel32 = ctypes.WinDLL("kernel32")
+        kernel32.GetStdHandle.restype = ctypes.c_void_p
+        answers = [str(kernel32.GetStdHandle(-12) == msvcrt.get_osfhandle(2))]
+        try:
+            subprocess.check_output([sys.executable, "-c", "pass"],
+                                    creationflags=subprocess.CREATE_NO_WINDOW)
+            answers.append("started")
+        except OSError as refused:
+            answers.append(repr(refused))
+        with open(sys.argv[1], "w", encoding="utf-8") as told:
+            told.write(" ".join(answers))
+    """), encoding="utf-8")
+    answer = tmp_path / "answer.txt"
+    windowed_python = Path(sys.executable).with_name("pythonw.exe")
+    with (tmp_path / "its_error_output.txt").open("wb") as its_error_output:
+        subprocess.run([str(windowed_python), str(loads_voice_then_starts_a_program), str(answer)],
+                       stdin=subprocess.DEVNULL, stdout=its_error_output, stderr=its_error_output,
+                       creationflags=subprocess.CREATE_NO_WINDOW, check=True, timeout=60)
+
+    assert answer.read_text(encoding="utf-8") == "True started"
 
 
 def _a_miss(tmp_path, **events):

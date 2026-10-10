@@ -20,6 +20,7 @@ from voice_core.miss_clips import save_miss_audio
 from voice_core.pauses import PauseSegmenter, PauseSettings
 from voice_core.readings import build_grammar
 from voice_core.second_opinion import settle
+from voice_core.sound_library import load_sounddevice
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ def why_unavailable() -> str:
     # Absent, present without PortAudio, or broken at import: unavailable either
     # way, and the message is what the app has to show for it.
     try:
-        importlib.import_module("sounddevice")
+        load_sounddevice()
         importlib.import_module("vosk")
     except Exception as exc:
         return _reason(exc)
@@ -124,7 +125,7 @@ class CommandListener:
         self._start_loading_the_second_engines()
         try:
             self._vosk = self._vosk or importlib.import_module("vosk")
-            self._sounddevice = self._sounddevice or importlib.import_module("sounddevice")
+            self._sounddevice = self._sounddevice or load_sounddevice()
             listening = self._build_recognizers()
         except Exception as exc:
             raise RecognizerUnavailable(_reason(exc)) from exc
