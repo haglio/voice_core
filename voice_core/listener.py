@@ -36,6 +36,9 @@ LISTEN_HEARTBEAT_S = 60.0
 # How long a closing listener waits for a reading already under way.
 SECOND_OPINION_PATIENCE_S = 5.0
 
+NOISE_DROWNS_SPEECH = "a steady noise on the microphone is drowning out what is said"
+NOISE_STOPPED = "the steady noise on the microphone has stopped"
+
 
 class RecognizerUnavailable(Exception):
     pass
@@ -255,10 +258,10 @@ class CommandListener:
 
     def _tell_of_the_noise(self, *, drowns_speech: bool) -> None:
         if drowns_speech:
-            logger.warning("Voice: a steady noise on the microphone is drowning out what is said")
+            logger.warning("Voice: %s", NOISE_DROWNS_SPEECH)
             told = self._events.noisy
         else:
-            logger.info("Voice: the steady noise on the microphone has stopped")
+            logger.info("Voice: %s", NOISE_STOPPED)
             told = self._events.quiet_again
         if told is not None:
             told()
