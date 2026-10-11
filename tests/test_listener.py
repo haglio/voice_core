@@ -211,8 +211,7 @@ def test_audio_coming_back_after_a_stall_is_news_of_its_own():
     assert recovered == [True]
 
 
-DROWNED_OUT = ("Voice: the microphone is picking up a steady noise as loud as speech -- "
-               "nothing said can be heard over it until it stops")
+DROWNED_OUT = "Voice: a steady noise on the microphone is drowning out what is said"
 
 
 def test_a_steady_noise_as_loud_as_an_ordinary_word_is_told_once(caplog):

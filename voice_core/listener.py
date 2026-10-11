@@ -255,8 +255,7 @@ class CommandListener:
 
     def _tell_of_the_noise(self, *, drowns_speech: bool) -> None:
         if drowns_speech:
-            logger.warning("Voice: the microphone is picking up a steady noise as loud as speech "
-                           "-- nothing said can be heard over it until it stops")
+            logger.warning("Voice: a steady noise on the microphone is drowning out what is said")
             told = self._events.noisy
         else:
             logger.info("Voice: the steady noise on the microphone has stopped")
