@@ -31,6 +31,11 @@ never on a listener that has wedged. `on_failure` receives what ended the listen
 `on_heard` receives a `Heard`: the `Recognition` (the phrase that was said, or which
 kind of miss it was), when the utterance began, how loud it was, and its audio.
 
+A microphone can fail without going quiet: a steady hum as loud as speech raises the bar a
+word has to clear until nothing said clears it. The listener logs a warning when that
+starts and a line when it stops, and calls `ListenerEvents.noisy` and `quiet_again` for an
+app that shows its own.
+
 ## Two engines, because neither is good alone
 
 Measured on recordings of the owner's voice (see CLAUDE.md for where they are and

@@ -12,10 +12,10 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from voice_core.capture import AudioStall
+from voice_core.capture import AudioStall, SteadyNoise
 from voice_core.commands import CommandRules
 from voice_core.listening import Heard, Listening, Recognizers, outcome_line
-from voice_core.microphone import probe_input_device, resolve_input_device
+from voice_core.microphone import loudness, probe_input_device, resolve_input_device
 from voice_core.miss_clips import save_miss_audio
 from voice_core.pauses import PauseSegmenter, PauseSettings
 from voice_core.readings import build_grammar
@@ -79,6 +79,8 @@ class ListenerEvents:
     partial: Callable[[str], None] | None = None
     stalled: Callable[[float], None] | None = None
     recovered: Callable[[], None] | None = None
+    noisy: Callable[[], None] | None = None
+    quiet_again: Callable[[], None] | None = None
     # Whether the room is being listened to: what a muted app mishears is not kept.
     keeps_misses: Callable[[], bool] | None = None
     # For an app that takes dictation: the words of an utterance that was no command, handed
@@ -137,6 +139,9 @@ class CommandListener:
         with stream, self._delivery() as deliver:
             began = self._clock()
             stall = AudioStall(now=began)
+            pauses = self._settings.pauses
+            noise = SteadyNoise(too_loud=pauses.drowning_background(),
+                                frames=pauses.steady_noise_frames)
             last_heartbeat = began
             while not self._stop.is_set():
                 try:
@@ -146,9 +151,9 @@ class CommandListener:
                     continue
                 now = self._clock()
                 if stall.note_block(now=now):
-                    logger.info("Voice: audio from the microphone resumed")
-                    if self._events.recovered is not None:
-                        self._events.recovered()
+                    self._tell_the_audio_is_back()
+                if noise.changed(loudness(data)):
+                    self._tell_of_the_noise(drowns_speech=noise.drowns_speech)
                 if now - last_heartbeat >= LISTEN_HEARTBEAT_S:
                     last_heartbeat = now
                     logger.debug("Voice: listening; loudest sample since the last report: %d",
@@ -242,6 +247,22 @@ class CommandListener:
                        "be heard until it comes back", idle)
         if self._events.stalled is not None:
             self._events.stalled(idle)
+
+    def _tell_the_audio_is_back(self) -> None:
+        logger.info("Voice: audio from the microphone resumed")
+        if self._events.recovered is not None:
+            self._events.recovered()
+
+    def _tell_of_the_noise(self, *, drowns_speech: bool) -> None:
+        if drowns_speech:
+            logger.warning("Voice: the microphone is picking up a steady noise as loud as speech "
+                           "-- nothing said can be heard over it until it stops")
+            told = self._events.noisy
+        else:
+            logger.info("Voice: the steady noise on the microphone has stopped")
+            told = self._events.quiet_again
+        if told is not None:
+            told()
 
     def _build_recognizers(self) -> Listening:
         model = self._vosk.Model(model_name=self._settings.model_name)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import array
+from collections import deque
 
 
 class CaptureLevel:
@@ -46,3 +47,19 @@ class AudioStall:
         recovered, self._stalled = self._stalled, False
         self._last_block_at = now
         return recovered
+
+
+class SteadyNoise:
+    def __init__(self, *, too_loud: float, frames: int) -> None:
+        self._too_loud = too_loud
+        self._heard: deque[float] = deque(maxlen=frames)
+        self.drowns_speech = False
+
+    def changed(self, level: float) -> bool:
+        self._heard.append(level)
+        if len(self._heard) < self._heard.maxlen:
+            return False
+        quiet_frames = sum(heard < self._too_loud for heard in self._heard)
+        drowns = quiet_frames < max(1, len(self._heard) // 10)
+        changed, self.drowns_speech = drowns != self.drowns_speech, drowns
+        return changed

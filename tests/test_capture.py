@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import array
 
-from voice_core.capture import AUDIO_STALL_S, AudioStall, CaptureLevel
+from voice_core.capture import AUDIO_STALL_S, AudioStall, CaptureLevel, SteadyNoise
 
 
 def _pcm(*samples):
@@ -68,3 +68,36 @@ def test_the_first_block_after_a_stall_says_the_audio_is_back_and_a_new_stall_ca
     assert stall.note_block(now=AUDIO_STALL_S + 1) is True
     assert stall.note_block(now=AUDIO_STALL_S + 2) is False
     assert stall.note_silence(now=2 * AUDIO_STALL_S + 2) == AUDIO_STALL_S
+
+
+def test_a_noise_that_never_lets_up_is_news_once_a_whole_stretch_of_it_has_been_heard():
+    noise = SteadyNoise(too_loud=LOUD, frames=10)
+
+    flips = [noise.changed(LOUD) for _ in range(12)]
+
+    assert flips == [False] * 9 + [True, False, False]
+    assert noise.drowns_speech
+
+
+def _after(levels, *, frames):
+    noise = SteadyNoise(too_loud=LOUD, frames=frames)
+    for level in levels:
+        noise.changed(level)
+    return noise
+
+
+def test_a_moment_of_quiet_does_not_hide_the_noise_but_a_tenth_of_the_stretch_does():
+    a_moment = [LOUD] * 7 + [FAINT] + [LOUD] * 12
+    a_tenth = [LOUD] * 7 + [FAINT] + [LOUD] * 5 + [FAINT] + [LOUD] * 6
+
+    assert _after(a_moment, frames=20).drowns_speech
+    assert not _after(a_tenth, frames=20).drowns_speech
+
+
+def test_the_noise_stopping_is_news_once_a_tenth_of_the_stretch_has_been_quiet():
+    noise = _after([LOUD] * 10, frames=10)
+
+    flips = [noise.changed(FAINT) for _ in range(3)]
+
+    assert flips == [True, False, False]
+    assert not noise.drowns_speech

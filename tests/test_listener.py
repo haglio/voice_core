@@ -34,8 +34,10 @@ STALLED_FOR = 11.0
 FRAME = 480
 VOICED = array.array("h", [2000, -2000] * (FRAME // 2)).tobytes()
 QUIET = bytes(FRAME * 2)
+NOISE_FRAMES = 10
 PAUSES = PauseSettings(floor=1600, ratio=1.5, calibration_frames=1, hangover_frames=2,
-                       min_speech_frames=2, frame_samples=FRAME)
+                       min_speech_frames=2, frame_samples=FRAME, ordinary_word=3000,
+                       steady_noise_frames=NOISE_FRAMES)
 A_COMMAND = [QUIET, VOICED, VOICED, QUIET, QUIET]
 ITS_AUDIO = VOICED + VOICED + QUIET + QUIET
 
@@ -207,6 +209,36 @@ def test_audio_coming_back_after_a_stall_is_news_of_its_own():
     listener.run()
 
     assert recovered == [True]
+
+
+DROWNED_OUT = ("Voice: the microphone is picking up a steady noise as loud as speech -- "
+               "nothing said can be heard over it until it stops")
+
+
+def test_a_steady_noise_as_loud_as_an_ordinary_word_is_told_once(caplog):
+    noisy = []
+
+    with caplog.at_level(logging.WARNING, logger="voice_core.listener"):
+        _listener(noisy=lambda: noisy.append(True),
+                  engines=Engines(_vosk([]), _sounddevice([], [VOICED] * NOISE_FRAMES))).run()
+
+    assert noisy == [True]
+    assert caplog.messages == [DROWNED_OUT]
+
+
+def test_the_noise_stopping_is_news_of_its_own(caplog):
+    told = []
+    listener = CommandListener(
+        RULES, SETTINGS,
+        ListenerEvents(heard=print, noisy=lambda: told.append("noisy"),
+                       quiet_again=lambda: (told.append("quiet again"), listener.stop())),
+        Engines(_vosk([]), _sounddevice([], [VOICED] * NOISE_FRAMES + [QUIET])))
+
+    with caplog.at_level(logging.INFO, logger="voice_core.listener"):
+        listener.run()
+
+    assert told == ["noisy", "quiet again"]
+    assert caplog.messages[-1] == "Voice: the steady noise on the microphone has stopped"
 
 
 def test_the_words_still_forming_reach_whoever_asked_for_them():

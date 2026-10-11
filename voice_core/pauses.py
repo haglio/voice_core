@@ -16,7 +16,9 @@ class PauseSettings:
     The owner's microphone is quiet -- his speech runs 60 to 600 a frame, against digital
     silence -- so the floor is the one his dictation app settled on over replayed sessions
     (0.0008 of full scale), not the 0.008 Origenerator had, which sat above most of his words.
-    Half a second of quiet ends an utterance; under 180 ms of sound holds no word."""
+    Half a second of quiet ends an utterance; under 180 ms of sound holds no word. An ordinary
+    word of his is 200: ten seconds seldom quiet enough to let one clear the bar is a noise that
+    drowns him out."""
 
     floor: float = 26.0
     ratio: float = 2.5
@@ -26,6 +28,11 @@ class PauseSettings:
     frame_samples: int = 480  # 30 ms at 16 kHz
     # Twenty seconds, where vosk's own endpointer gave up on a room that never pauses.
     longest_frames: int = 667
+    ordinary_word: float = 200.0
+    steady_noise_frames: int = 333
+
+    def drowning_background(self) -> float:
+        return self.ordinary_word / self.ratio
 
 
 class PauseSegmenter:
