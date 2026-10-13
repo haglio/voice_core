@@ -79,6 +79,7 @@ class ListenerEvents:
     partial: Callable[[str], None] | None = None
     stalled: Callable[[float], None] | None = None
     recovered: Callable[[], None] | None = None
+    listening: Callable[[], None] | None = None
     # Whether the room is being listened to: what a muted app mishears is not kept.
     keeps_misses: Callable[[], bool] | None = None
     # For an app that takes dictation: the words of an utterance that was no command, handed
@@ -135,6 +136,8 @@ class CommandListener:
         except Exception as exc:
             raise MicrophoneUnavailable(_reason(exc)) from exc
         with stream, self._delivery() as deliver:
+            if self._events.listening is not None:
+                self._events.listening()
             began = self._clock()
             stall = AudioStall(now=began)
             last_heartbeat = began

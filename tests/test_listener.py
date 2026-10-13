@@ -209,6 +209,19 @@ def test_audio_coming_back_after_a_stall_is_news_of_its_own():
     assert recovered == [True]
 
 
+def test_the_app_is_told_when_the_microphone_opens_and_before_anything_is_heard():
+    opened, told = [], []
+    listener = CommandListener(
+        RULES, SETTINGS,
+        ListenerEvents(heard=lambda heard: (told.append("heard"), listener.stop()),
+                       listening=lambda: told.append(f"listening, {len(opened)} microphone open")),
+        Engines(_vosk([]), _sounddevice(opened, A_COMMAND)))
+
+    listener.run()
+
+    assert told == ["listening, 1 microphone open", "heard"]
+
+
 def test_the_words_still_forming_reach_whoever_asked_for_them():
     forming = []
 
