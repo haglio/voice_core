@@ -65,7 +65,9 @@ on `main`, so the global "ff-merge into the primary checkout under
   `gh pr create --fill`. Auto-merge arms itself; the queue rebases your PR onto
   `main`, runs the required check, and merges it when green. Don't ff-merge into
   the primary checkout, don't push `main` directly, and never force-push `main`.
-- **Sync local checkouts by pulling.** `main` advances only on origin (via the
-  queue), so the primary checkout and worktrees update with
-  `git pull --ff-only origin main`. The primary is only ever fast-forwarded.
+- **The production updater moves the primary checkout; never pull it yourself.**
+  `main` advances only on origin (via the queue), and app_support's production
+  updater brings the primary checkout up to it within a few minutes, so
+  worktrees update with `git rebase origin/main` and the primary is never
+  pulled, reset or merged into by hand.
 - **A red required check** (`.github/workflows/merge-gate.yml`) can't land.
