@@ -23,6 +23,12 @@ jobs:
       python-version: "3.14"
       timeout-minutes: 5
 
+  # Fun Time and Origenerator, installed with the candidate over their own pins and
+  # every module they ship imported, so a release here that takes away what an app
+  # still uses is refused before it ships rather than met when the app moves its pin.
+  apps:
+    uses: haglio/.github/.github/workflows/apps-import.yml@main
+
   # A version for each landing, so the apps that run this one can pin the copy
   # they were built against. The tag is the version: pyproject reads it with
   # setuptools-scm.
