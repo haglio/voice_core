@@ -82,9 +82,8 @@ class ListenerEvents:
     listening: Callable[[], None] | None = None
     # Whether the room is being listened to: what a muted app mishears is not kept.
     keeps_misses: Callable[[], bool] | None = None
-    # For an app that takes dictation: the words of an utterance that was no command, handed
-    # over even when there were none to read, so the app can say it caught nothing.
     speech: Callable[[str, Heard], None] | None = None
+    wants_words: Callable[[Heard], bool] | None = None
 
 
 @dataclass(frozen=True)
@@ -218,8 +217,13 @@ class CommandListener:
     def _takes_dictation(self) -> bool:
         return self._events.speech is not None and self._take_down is not None
 
+    def _wants_the_words_of(self, heard: Heard) -> bool:
+        if self._events.wants_words is None:
+            return not heard.recognition.phrase
+        return self._events.wants_words(heard)
+
     def _hand_over_speech(self, heard: Heard) -> None:
-        if not self._takes_dictation() or heard.recognition.phrase:
+        if not self._takes_dictation() or not self._wants_the_words_of(heard):
             return
         try:
             words = self._take_down(heard.audio, self._settings.speech_hint)
@@ -259,7 +263,8 @@ class CommandListener:
             unrestricted.SetWords(True)
         return Listening(self._rules, Recognizers(recognizer, unrestricted, sample_rate),
                          PauseSegmenter(self._settings.pauses), on_partial=self._events.partial,
-                         for_dictation=self._takes_dictation())
+                         for_dictation=self._takes_dictation()
+                         and self._events.wants_words is None)
 
     def _open_microphone(self, blocks: queue.Queue[tuple[bytes, float]]):
         return self._sounddevice.RawInputStream(
