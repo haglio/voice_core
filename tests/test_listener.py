@@ -104,7 +104,8 @@ SETTINGS = ListenerSettings(model_name="a-model", device_name="desk", poll_secon
                             pauses=PAUSES)
 
 
-def _listener(*, settings=SETTINGS, rules=RULES, engines, keeps_misses=None, **events):
+def _listener(*, settings=SETTINGS, rules=RULES, engines, keeps_misses=None, wants_words=None,
+              **events):
     """A listener that stops itself at whichever event fires first."""
     def stopping(wanted=None):
         def event(*args):
@@ -116,6 +117,7 @@ def _listener(*, settings=SETTINGS, rules=RULES, engines, keeps_misses=None, **e
     listener = CommandListener(
         rules, settings,
         ListenerEvents(**{"heard": stopping(), "keeps_misses": keeps_misses,
+                          "wants_words": wants_words,
                           **{name: stopping(wanted) for name, wanted in events.items()}}),
         engines)
     return listener
@@ -504,6 +506,34 @@ def test_a_command_is_not_also_taken_down_as_speech():
     take_down.assert_not_called()
 
 
+def test_an_app_that_asks_for_an_utterances_words_has_them_taken_down_though_it_was_a_command():
+    asked, spoken = [], []
+
+    def wants_words(heard):
+        asked.append(heard.recognition.phrase)
+        return True
+
+    _listener(wants_words=wants_words, speech=lambda text, heard: spoken.append(text),
+              engines=Engines(_vosk([], reading="next"), _sounddevice([], A_COMMAND),
+                              take_down=lambda audio, hint: "next to her")).run()
+
+    assert asked == ["next"]
+    assert spoken == ["next to her"]
+
+
+def test_an_app_that_does_not_want_an_utterances_words_has_nothing_taken_down():
+    take_down = Mock(return_value="make the sky darker")
+    heard = []
+
+    _listener(wants_words=lambda heard: False, heard=heard.append,
+              speech=lambda text, heard: pytest.fail(f"took down {text!r}"),
+              engines=Engines(_vosk([], reading="left net"), _sounddevice([], A_COMMAND),
+                              take_down=take_down)).run()
+
+    assert heard[0].recognition.unrecognized_text == "left net"
+    take_down.assert_not_called()
+
+
 def test_a_quiet_room_the_recognizer_reads_words_out_of_is_never_taken_down_as_speech():
     take_down = Mock(return_value="thank you")
     spoken, ticks = [], itertools.count()
@@ -547,10 +577,10 @@ def test_an_engine_that_cannot_take_an_utterance_down_is_logged_and_nothing_is_s
     assert "could not be taken down" in caplog.text
 
 
-def _heard_by(*, an_app_taking_dictation):
+def _heard_by(*, an_app_taking_dictation, wants_words=None):
     heard = []
     wants_speech = {"speech": lambda text, heard: None} if an_app_taking_dictation else {}
-    _listener(heard=heard.append, **wants_speech,
+    _listener(heard=heard.append, wants_words=wants_words, **wants_speech,
               engines=Engines(_vosk([], settles_at=3), _sounddevice([], A_COMMAND),
                               take_down=Mock(return_value="") if an_app_taking_dictation else None)
               ).run()
@@ -560,6 +590,12 @@ def _heard_by(*, an_app_taking_dictation):
 def test_a_breath_read_twice_is_talk_to_an_app_taking_dictation_and_a_command_to_any_other():
     assert _heard_by(an_app_taking_dictation=False).phrase == "next"
     assert _heard_by(an_app_taking_dictation=True).unrecognized_text == "next next"
+
+
+def test_a_breath_read_twice_is_a_command_to_an_app_that_takes_dictation_only_when_it_asks():
+    recognition = _heard_by(an_app_taking_dictation=True, wants_words=lambda heard: False)
+
+    assert recognition.phrase == "next"
 
 
 def test_a_phrase_said_in_another_language_is_read_in_it_by_the_engine_handed_in_for_it():
