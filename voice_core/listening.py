@@ -24,6 +24,8 @@ class Heard:
     phrase_audio: bytes = b""
     words_formed: bool = False
     ended_at: float | None = None
+    # Whether a speech detector heard anybody speak in it; None with no detector to say.
+    speaker_heard: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -85,7 +87,7 @@ class Listening:
     def _heard(self, audio: bytes, *, words_formed: bool, ended_at: float) -> Heard:
         heard = Heard(Recognition(), spoken_at=self._began_at, peak=self._level.take_utterance(),
                       audio=audio, candidates={}, phrase_audio=audio, words_formed=words_formed,
-                      ended_at=ended_at)
+                      ended_at=ended_at, speaker_heard=self._segmenter.speaker_was_heard)
         readings = [*self._settled_partway, self._recognizer.FinalResult()]
         said = [ranked for ranked in readings if _first_choice(ranked)] or readings[-1:]
         meant = self._reading_meant(said, peak=heard.peak)
@@ -145,9 +147,11 @@ def outcome_line(heard: Heard, *, now: float, rules: CommandRules) -> tuple[int,
             f"Voice command: {recognition.phrase!r}{repaired} "
             f"(spoken {now - heard.spoken_at:.2f}s before recognition{ended}, peak {peak})")
     if recognition.unconfirmed_phrase:
+        why = ("where nobody was heard speaking" if heard.speaker_heard is False
+               else f"but the second engine read {unrestricted}")
         return logging.INFO, (
-            f"Voice: heard a {_count(recognition.unconfirmed_phrase)}-word command but the "
-            f"second engine read {unrestricted} (peak {peak})")
+            f"Voice: heard a {_count(recognition.unconfirmed_phrase)}-word command {why} "
+            f"(peak {peak})")
     if recognition.refused_phrase:
         return logging.INFO, (
             f"Voice: heard a {_count(recognition.refused_phrase)}-word command but its "

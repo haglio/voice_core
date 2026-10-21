@@ -124,6 +124,27 @@ def test_the_room_alone_with_no_speaker_in_it_is_cut_as_it_always_was():
     assert ended == [None] * 5 + [ROOM_NOISE * 6]
 
 
+def test_it_says_whether_a_speaker_was_heard_in_the_utterance_it_last_ended():
+    segmenter = _hearing_speech()
+
+    for frame in (SPEECH, SPEECH, ROOM_NOISE, ROOM_NOISE, ROOM_NOISE):
+        segmenter.push(frame)
+    spoken = segmenter.speaker_was_heard
+    for frame in (ROOM_NOISE, ROOM_NOISE, SILENCE, SILENCE, SILENCE):
+        segmenter.push(frame)
+
+    assert (spoken, segmenter.speaker_was_heard) == (True, False)
+
+
+def test_without_a_speech_detector_whether_a_speaker_was_heard_is_not_known():
+    segmenter = _calibrated()
+
+    for frame in (SPEECH, SPEECH, SILENCE, SILENCE, SILENCE):
+        segmenter.push(frame)
+
+    assert segmenter.speaker_was_heard is None
+
+
 def test_the_room_a_session_starts_in_is_no_longer_the_bar_once_it_has_gone_quiet():
     segmenter = PauseSegmenter(PauseSettings(floor=10, ratio=2.0, calibration_frames=1,
                                              hangover_frames=3, min_speech_frames=2))

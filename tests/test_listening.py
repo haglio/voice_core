@@ -268,6 +268,16 @@ def test_a_command_is_logged_with_how_long_before_recognition_its_utterance_ende
                     "ended 0.75s before it, peak 2000)")
 
 
+def test_an_utterance_says_whether_a_speaker_was_heard_in_it():
+    hearing = Listening(RULES, Recognizers(_Recognizer(_ranked("next"))),
+                        PauseSegmenter(PAUSES, hears_speech=lambda frame: frame == VOICED))
+    deaf = _listening(_Recognizer(_ranked("next")))
+
+    heard = _feed(hearing, A_COMMAND) + _feed(deaf, A_COMMAND)
+
+    assert [one.speaker_heard for one in heard] == [True, None]
+
+
 def test_an_utterance_says_when_it_ended():
     [heard] = _feed(_listening(_Recognizer(_ranked("next"))), A_COMMAND)
 
@@ -280,6 +290,15 @@ def test_a_repair_is_logged_beside_the_length_of_the_reading_it_was_taken_from_u
 
     assert line == ("Voice command: 'left next' -- the recognizer's choice 2, under a 2-word "
                     "reading, which is no command (spoken 1.00s before recognition, peak 2000)")
+
+
+def test_a_command_heard_where_nobody_was_heard_speaking_is_logged_as_that():
+    heard = replace(_heard(Recognition(unconfirmed_phrase="next", heard="next")),
+                    speaker_heard=False)
+
+    _, line = outcome_line(heard, now=11.0, rules=RULES)
+
+    assert line == "Voice: heard a 1-word command where nobody was heard speaking (peak 2000)"
 
 
 def test_every_way_of_not_being_a_command_is_logged_under_its_own_name():
