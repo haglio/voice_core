@@ -23,6 +23,7 @@ class Heard:
     candidates: Mapping[str, int]
     phrase_audio: bytes = b""
     words_formed: bool = False
+    ended_at: float | None = None
 
 
 @dataclass(frozen=True)
@@ -63,7 +64,8 @@ class Listening:
         if utterance is not None:
             words_formed = bool(self._partial)
             self._note_partial("")
-            return self._heard(utterance, words_formed=words_formed)
+            return self._heard(utterance, words_formed=words_formed,
+                               ended_at=started_at + len(data) / self._bytes_per_second)
         if self._segmenter.speaking and self._segmenter.holds_speech:
             forming = partial_text(self._recognizer.PartialResult())
             if forming:
@@ -80,9 +82,10 @@ class Listening:
         self._level.take_utterance()
         self._settled_partway = []
 
-    def _heard(self, audio: bytes, *, words_formed: bool) -> Heard:
+    def _heard(self, audio: bytes, *, words_formed: bool, ended_at: float) -> Heard:
         heard = Heard(Recognition(), spoken_at=self._began_at, peak=self._level.take_utterance(),
-                      audio=audio, candidates={}, phrase_audio=audio, words_formed=words_formed)
+                      audio=audio, candidates={}, phrase_audio=audio, words_formed=words_formed,
+                      ended_at=ended_at)
         readings = [*self._settled_partway, self._recognizer.FinalResult()]
         said = [ranked for ranked in readings if _first_choice(ranked)] or readings[-1:]
         meant = self._reading_meant(said, peak=heard.peak)
@@ -136,9 +139,11 @@ def outcome_line(heard: Heard, *, now: float, rules: CommandRules) -> tuple[int,
         repaired = (f" -- the recognizer's choice {recognition.rank + 1}, under a "
                     f"{_count(recognition.heard)}-word reading, which is no command"
                     if recognition.rank else "")
+        ended = ("" if heard.ended_at is None
+                 else f" and its utterance ended {now - heard.ended_at:.2f}s before it")
         return logging.INFO, (
             f"Voice command: {recognition.phrase!r}{repaired} "
-            f"(spoken {now - heard.spoken_at:.2f}s before recognition, peak {peak})")
+            f"(spoken {now - heard.spoken_at:.2f}s before recognition{ended}, peak {peak})")
     if recognition.unconfirmed_phrase:
         return logging.INFO, (
             f"Voice: heard a {_count(recognition.unconfirmed_phrase)}-word command but the "
