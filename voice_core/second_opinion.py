@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
+from functools import partial
 
 from voice_core.commands import CommandRules, Recognition
 from voice_core.listening import Heard
@@ -80,10 +81,19 @@ def settle(heard: Heard, *, rules: CommandRules, read: Callable[[bytes, str], st
         return heard
     audio = heard.phrase_audio or heard.audio
     candidates = tuple(heard.candidates)
-    chosen, reading = _first_chosen((read, read_closely), audio, ", ".join(_as_written(rules, candidates)),
-                                    candidates, rules)
-    if chosen is None and readers_in:
-        chosen = _chosen_in_their_own_language(audio, candidates, rules, readers_in)
+    readers_in = readers_in or {}
+    passes = [partial(_first_chosen, (read, read_closely), audio,
+                      ", ".join(_as_written(rules, candidates)), candidates, rules),
+              partial(_chosen_in_their_own_language, audio, candidates, rules, readers_in)]
+    if _said_in_a_language_of_its_own(min(heard.candidates, key=heard.candidates.get),
+                                      rules, readers_in):
+        passes.reverse()
+    chosen, reading = None, ""
+    for reading_pass in passes:
+        chosen, read_there = reading_pass()
+        reading = reading or read_there
+        if chosen is not None:
+            break
     if chosen is None:
         return replace(heard, recognition=replace(
             first, phrase=None, rank=0, unconfirmed_phrase=first.phrase, free_text=reading))
@@ -91,8 +101,14 @@ def settle(heard: Heard, *, rules: CommandRules, read: Callable[[bytes, str], st
         phrase=chosen, rank=heard.candidates[chosen], heard=first.heard))
 
 
+def _said_in_a_language_of_its_own(phrase: str, rules: CommandRules,
+                                   readers_in: Mapping[str, Callable[[bytes, str], str]]) -> bool:
+    return bool(rules.said_in) and rules.said_in(phrase) in readers_in
+
+
 def _chosen_in_their_own_language(audio: bytes, candidates: Sequence[str], rules: CommandRules,
-                                  readers_in: Mapping[str, Callable[[bytes, str], str]]) -> str | None:
+                                  readers_in: Mapping[str, Callable[[bytes, str], str]],
+                                  ) -> tuple[str | None, str]:
     for language, read in readers_in.items():
         theirs = tuple(phrase for phrase in candidates if rules.said_in and rules.said_in(phrase) == language)
         if not theirs:
@@ -100,8 +116,8 @@ def _chosen_in_their_own_language(audio: bytes, candidates: Sequence[str], rules
         hint = _as_a_sentence(", ".join(dict.fromkeys(_as_written(rules, theirs))))
         chosen, _ = _first_chosen((read, getattr(read, "read_closely", None)), audio, hint, theirs, rules)
         if chosen is not None:
-            return chosen
-    return None
+            return chosen, ""
+    return None, ""
 
 
 def _first_chosen(reads: Sequence[Callable[[bytes, str], str] | None], audio: bytes, hint: str,
