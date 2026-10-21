@@ -25,9 +25,12 @@ from voice_core.listener import (
     MicrophoneUnavailable,
     PauseSettings,
     RecognizerUnavailable,
+    engines_for,
     why_unavailable,
 )
 from voice_core.listening import PHRASE_MARGIN_S
+from voice_core.speech import HearsSpeech
+from voice_core.whisper_reader import WhisperReader
 
 RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_rescued=lambda phrase: False)
 STALLED_FOR = 11.0
@@ -630,3 +633,27 @@ def test_a_phrase_said_in_another_language_is_read_in_it_by_the_engine_handed_in
 
     assert order == ["loaded", "Next."]
     assert [one.recognition.phrase for one in heard] == ["next"]
+
+
+def test_an_app_hears_through_whisper_in_each_language_of_its_phrases_and_the_speech_detector():
+    engines = engines_for(replace(RULES, said_in={"next": "de"}.get), ListenerEvents(heard=print))
+
+    assert (type(engines.second_opinion), set(engines.second_opinion_in), engines.take_down,
+            type(engines.hears_speech)) == (WhisperReader, {"de"}, None, HearsSpeech)
+
+
+def test_an_app_that_asks_for_speech_is_handed_a_reader_to_take_it_down():
+    engines = engines_for(RULES, ListenerEvents(heard=print, speech=print))
+
+    assert type(engines.take_down) is WhisperReader
+
+
+def test_an_app_hears_on_its_own_clock_through_the_command_reader_it_started_loading_ahead():
+    def clock():
+        return 7.0
+
+    loaded_ahead = WhisperReader()
+
+    engines = engines_for(RULES, ListenerEvents(heard=print), clock=clock, second_opinion=loaded_ahead)
+
+    assert (engines.clock, engines.second_opinion) == (clock, loaded_ahead)

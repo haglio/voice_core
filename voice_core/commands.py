@@ -25,6 +25,9 @@ class CommandRules:
     # The language a phrase is said in when it is not English ("de" for a German word).
     said_in: Callable[[str], str | None] | None = None
 
+    def other_languages(self) -> frozenset[str]:
+        return frozenset(filter(None, map(self.said_in, self.phrases))) if self.said_in else frozenset()
+
 
 @dataclass(frozen=True)
 class Recognition:

@@ -21,6 +21,8 @@ from voice_core.pauses import PauseSegmenter, PauseSettings
 from voice_core.readings import build_grammar
 from voice_core.second_opinion import settle
 from voice_core.sound_library import load_sounddevice
+from voice_core.speech import hears_speech
+from voice_core.whisper_reader import WhisperReader
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +102,17 @@ class Engines:
     # Says of each frame whether somebody is speaking, so an utterance ends when the speaker
     # pauses even in a room loud enough to hold it open (speech.hears_speech).
     hears_speech: Callable[[bytes], bool] | None = None
+
+
+def engines_for(rules: CommandRules, events: ListenerEvents, *,
+                clock: Callable[[], float] = time.monotonic,
+                second_opinion: Callable[[bytes, str], str] | None = None) -> Engines:
+    return Engines(clock=clock,
+                   second_opinion=second_opinion or WhisperReader(),
+                   second_opinion_in={language: WhisperReader(language=language)
+                                      for language in rules.other_languages()},
+                   take_down=WhisperReader(for_dictation=True) if events.speech else None,
+                   hears_speech=hears_speech())
 
 
 class CommandListener:

@@ -8,20 +8,26 @@ with the app.
 
 ```python
 from voice_core.commands import CommandRules
-from voice_core.listener import CommandListener, Engines, ListenerEvents, ListenerSettings
+from voice_core.listener import CommandListener, ListenerEvents, ListenerSettings, engines_for
 from voice_core.listening_thread import ListeningThread
-from voice_core.whisper_reader import WhisperReader
 
+rules = CommandRules(phrases=frozenset({"next", "left next", "quit"}),
+                     never_rescued={"quit"}.__contains__)
+events = ListenerEvents(heard=on_heard)
 listening = ListeningThread(lambda: CommandListener(
-    CommandRules(phrases=frozenset({"next", "left next", "quit"}),
-                 never_rescued={"quit"}.__contains__),
+    rules,
     ListenerSettings(model_name="vosk-model-en-us-0.22-lgraph", device_name="Brio",
                      miss_dir=state_dir / "voice_misses"),
-    ListenerEvents(heard=on_heard),
-    Engines(second_opinion=WhisperReader()),
+    events,
+    engines_for(rules, events),
 ), failed=on_failure)
 listening.start()
 ```
+
+`engines_for` gives every app the same engines: whisper reading each command a second
+time, a reader for each language its rules say a phrase in, one taking speech down for an
+app that asks for speech, and a speech detector that ends an utterance when its speaker
+pauses, however loud the room stays.
 
 `ListeningThread` runs a listener on a thread of its own and can be stopped and started
 again, each start with a fresh listener; `stop()` waits for the microphone to close, though
