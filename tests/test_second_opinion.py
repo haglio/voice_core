@@ -177,15 +177,25 @@ def test_a_phrase_its_own_language_turned_down_is_still_read_in_english():
     assert settled == heard
 
 
-def test_the_language_of_the_likeliest_candidate_is_read_first():
-    heard = _heard(Recognition(phrase="go now mode", heard="go now mode"),
-                   {"go now mode": 0, "next": 2})
+def test_with_no_phrase_settled_on_the_language_of_the_likeliest_candidate_is_read_first():
+    heard = _heard(Recognition(unrecognized_text="eyes", heard="eyes"),
+                   {"go now mode": 1, "next": 3})
 
     settled = settle(heard, rules=_rules_with_genau_said_in_german(),
                      read=lambda audio, hint: "Next.",
                      readers_in={"de": lambda audio, hint: "Genau Mode."})
 
-    assert settled == heard
+    assert settled.recognition.phrase == "go now mode"
+
+
+def test_the_language_of_the_phrase_the_first_engine_settled_on_is_read_first_whatever_ranked_above_it():
+    heard = _heard(Recognition(phrase="go now", rank=2, heard="go no"), {"next": 1, "go now": 2})
+
+    settled = settle(heard, rules=_rules_with_genau_said_in_german(),
+                     read=lambda audio, hint: "Next.",
+                     readers_in={"de": lambda audio, hint: "Genau."})
+
+    assert settled.recognition.phrase == "go now"
 
 
 def test_a_phrase_said_in_english_is_never_read_again_in_another_language():

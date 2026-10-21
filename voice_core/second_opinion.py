@@ -87,8 +87,8 @@ def settle(heard: Heard, *, rules: CommandRules, read: Callable[[bytes, str], st
     passes = [partial(_first_chosen, (read, read_closely), audio,
                       ", ".join(_as_written(rules, candidates)), candidates, rules),
               partial(_chosen_in_their_own_language, audio, candidates, rules, readers_in)]
-    if _said_in_a_language_of_its_own(min(heard.candidates, key=heard.candidates.get),
-                                      rules, readers_in):
+    leading = first.phrase or min(heard.candidates, key=heard.candidates.get)
+    if _said_in_a_language_of_its_own(leading, rules, readers_in):
         passes.reverse()
     chosen, reading = None, ""
     for reading_pass in passes:
