@@ -87,6 +87,43 @@ def test_a_sound_that_never_pauses_is_cut_where_it_has_gone_on_too_long():
     assert ended[3] == SPEECH * 4
 
 
+ROOM_NOISE = array.array("h", [12000, -12000] * 2).tobytes()
+
+
+def _hearing_speech(**settings):
+    segmenter = PauseSegmenter(_settings(**settings), hears_speech=lambda frame: frame == SPEECH)
+    segmenter.push(SILENCE)
+    segmenter.push(SILENCE)
+    return segmenter
+
+
+def test_an_utterance_ends_once_the_speaker_has_paused_however_loud_the_room_stays():
+    segmenter = _hearing_speech()
+
+    ended = [segmenter.push(frame) for frame in
+             (ROOM_NOISE, SPEECH, SPEECH, ROOM_NOISE, ROOM_NOISE, ROOM_NOISE)]
+
+    assert ended[:5] == [None] * 5
+    assert ended[5] == ROOM_NOISE + SPEECH + SPEECH + ROOM_NOISE * 3
+
+
+def test_a_speaker_who_goes_on_before_a_whole_pause_has_passed_is_one_utterance():
+    segmenter = _hearing_speech()
+
+    ended = [segmenter.push(frame) for frame in
+             (SPEECH, ROOM_NOISE, ROOM_NOISE, SPEECH, ROOM_NOISE, ROOM_NOISE, ROOM_NOISE)]
+
+    assert [one is not None for one in ended] == [False] * 6 + [True]
+
+
+def test_the_room_alone_with_no_speaker_in_it_is_cut_as_it_always_was():
+    segmenter = _hearing_speech(longest_frames=6)
+
+    ended = [segmenter.push(ROOM_NOISE) for _ in range(6)]
+
+    assert ended == [None] * 5 + [ROOM_NOISE * 6]
+
+
 def test_the_room_a_session_starts_in_is_no_longer_the_bar_once_it_has_gone_quiet():
     segmenter = PauseSegmenter(PauseSettings(floor=10, ratio=2.0, calibration_frames=1,
                                              hangover_frames=3, min_speech_frames=2))

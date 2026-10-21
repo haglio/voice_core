@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import sys
 import threading
@@ -30,17 +31,20 @@ _FULL_LEVEL = 0.95
 _SILENCE = 1e-4
 
 
-def load_faster_whisper(model_size: str):
+def faster_whisper(module: str = "faster_whisper"):
     # faster-whisper needs no torch but imports any it finds, and a torch that loads
     # fine alone can die initializing c10.dll once Qt's DLLs are in the process
     # (WinError 1114), taking every reading with it. A torch already imported stays.
     sys.modules.setdefault("torch", None)
-    from faster_whisper import WhisperModel  # noqa: PLC0415 -- heavy, and only an app that asks
+    return importlib.import_module(module)
 
+
+def load_faster_whisper(model_size: str):
+    whisper_model = faster_whisper().WhisperModel
     # On the CPU by design: the one GPU is for pictures and Funestras. A reading took a median
     # 0.43 s on two threads, 0.33 s on four and 0.27 s on eight (this machine, 2026-09-18):
     # four is most of the gain and leaves the Funestras their cores.
-    on_this_machine = partial(WhisperModel, model_size, device="cpu", compute_type="int8",
+    on_this_machine = partial(whisper_model, model_size, device="cpu", compute_type="int8",
                               cpu_threads=4)
     try:
         return on_this_machine(local_files_only=True)

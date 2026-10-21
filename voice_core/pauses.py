@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from voice_core.microphone import loudness
@@ -32,7 +33,8 @@ class PauseSegmenter:
     """Vosk's own endpointer cannot end an utterance on the owner's microphone: the noise
     suppressor's silence reads to vosk as words, so it seldom hears the silence it waits for."""
 
-    def __init__(self, settings: PauseSettings) -> None:
+    def __init__(self, settings: PauseSettings, *,
+                 hears_speech: Callable[[bytes], bool] | None = None) -> None:
         self._floor = settings.floor
         self._ratio = settings.ratio
         self._calibrating = settings.calibration_frames
@@ -44,6 +46,9 @@ class PauseSegmenter:
         self._frames: list[bytes] = []
         self._speech_frames = 0
         self._quiet_run = 0
+        self._hears_speech = hears_speech
+        self._speaker_heard = False
+        self._since_the_speaker = 0
 
     @property
     def speaking(self) -> bool:
@@ -55,6 +60,7 @@ class PauseSegmenter:
 
     def push(self, frame: bytes) -> bytes | None:
         level = loudness(frame)
+        speaker = self._hears_speech is not None and self._hears_speech(frame)
         if self._room is None:
             self._calibration.append(level)
             if len(self._calibration) >= self._calibrating:
@@ -70,9 +76,15 @@ class PauseSegmenter:
                 return None
             self._frames.append(frame)
             self._quiet_run += 1
-        if self._quiet_run >= self._hangover_frames or self._has_gone_on_too_long():
+        self._speaker_heard = self._speaker_heard or speaker
+        self._since_the_speaker = 0 if speaker else self._since_the_speaker + 1
+        if (self._quiet_run >= self._hangover_frames or self._the_speaker_has_paused()
+                or self._has_gone_on_too_long()):
             return self._take()
         return None
+
+    def _the_speaker_has_paused(self) -> bool:
+        return self._speaker_heard and self._since_the_speaker >= self._hangover_frames
 
     def _has_gone_on_too_long(self) -> bool:
         return len(self._frames) >= self._longest_frames
@@ -80,4 +92,5 @@ class PauseSegmenter:
     def _take(self) -> bytes | None:
         utterance = b"".join(self._frames) if self.holds_speech else None
         self._frames, self._speech_frames, self._quiet_run = [], 0, 0
+        self._speaker_heard, self._since_the_speaker = False, 0
         return utterance
