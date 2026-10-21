@@ -3,6 +3,7 @@ from __future__ import annotations
 import array
 import json
 import logging
+from dataclasses import replace
 
 import pytest
 
@@ -79,7 +80,8 @@ def test_an_utterance_ends_where_the_speaker_pauses_and_the_recognizer_finishes_
     assert heard == [Heard(Recognition(phrase="left next", heard="left next"),
                            spoken_at=SPOKEN_AT, peak=LOUD,
                            audio=VOICED + VOICED + QUIET + QUIET, candidates={"left next": 0},
-                           phrase_audio=VOICED + VOICED + QUIET + QUIET)]
+                           phrase_audio=VOICED + VOICED + QUIET + QUIET,
+                           ended_at=pytest.approx(FIRST_FRAME_AT + len(A_COMMAND) * A_FRAME))]
 
 
 def _timed(*words):
@@ -255,6 +257,21 @@ def test_a_command_is_logged_with_how_long_ago_it_was_spoken_and_how_loud():
 
     assert (level, line) == (
         logging.INFO, "Voice command: 'next' (spoken 1.25s before recognition, peak 2000)")
+
+
+def test_a_command_is_logged_with_how_long_before_recognition_its_utterance_ended():
+    heard = replace(_heard(Recognition(phrase="next", heard="next")), ended_at=10.5)
+
+    _, line = outcome_line(heard, now=11.25, rules=RULES)
+
+    assert line == ("Voice command: 'next' (spoken 1.25s before recognition and its utterance "
+                    "ended 0.75s before it, peak 2000)")
+
+
+def test_an_utterance_says_when_it_ended():
+    [heard] = _feed(_listening(_Recognizer(_ranked("next"))), A_COMMAND)
+
+    assert heard.ended_at == pytest.approx(FIRST_FRAME_AT + len(A_COMMAND) * A_FRAME)
 
 
 def test_a_repair_is_logged_beside_the_length_of_the_reading_it_was_taken_from_under():
