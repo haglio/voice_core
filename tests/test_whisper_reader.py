@@ -9,30 +9,49 @@ from types import SimpleNamespace
 
 import pytest
 
-from voice_core.whisper_reader import WhisperReader, load_faster_whisper
+from voice_core.whisper_reader import Reading, WhisperReader, load_faster_whisper
 
 QUIET_PCM = array.array("h", [0, 16384, -16384, 0]).tobytes()
+A_SECOND = 16000
 
 
 class _Model:
-    def __init__(self, *texts):
+    def __init__(self, *texts, heard_as_silence=False):
         self._texts = texts
+        self._heard_as_silence = heard_as_silence
         self.asked = []
+        self.windows = []
 
     def transcribe(self, audio, **options):
         self.asked.append((list(audio), options))
         return (SimpleNamespace(text=text) for text in self._texts), None
 
+    def read_window(self, audio, **options):
+        self.windows.append((list(audio), options))
+        return Reading(" ".join(text.strip() for text in self._texts),
+                       no_speech_prob=0.9 if self._heard_as_silence else 0.1,
+                       avg_logprob=-1.5 if self._heard_as_silence else -0.2)
 
-def test_an_utterance_is_read_as_one_line_with_the_hint_as_whispers_prompt():
+
+def test_a_command_is_read_as_one_line_with_the_hint_as_whispers_prompt():
     model = _Model(" left", "next. ")
 
     reading = WhisperReader(load=lambda: model)(QUIET_PCM, "left next, next")
 
     assert reading == "left next."
-    [(samples, options)] = model.asked
+    [(samples, options)] = model.windows
     assert samples == pytest.approx([0.0, 0.5, -0.5, 0.0])
-    assert (options["initial_prompt"], options["language"]) == ("left next, next", "en")
+    assert (options["hint"], options["language"]) == ("left next, next", "en")
+
+
+def test_a_command_is_read_over_a_window_just_longer_than_it_never_less_than_three_seconds():
+    model = _Model("next")
+    reader = WhisperReader(load=lambda: model)
+
+    for seconds in (1, 10, 40):
+        reader(bytes(2 * seconds * A_SECOND), "next")
+
+    assert [options["frames"] for _samples, options in model.windows] == [300, 1050, 3000]
 
 
 def test_the_model_is_loaded_once_and_can_be_loaded_ahead_of_the_first_utterance():
@@ -101,7 +120,7 @@ def test_with_no_hint_whisper_is_given_no_prompt_at_all():
 
     WhisperReader(load=lambda: model)(QUIET_PCM, "")
 
-    assert model.asked[0][1]["initial_prompt"] is None
+    assert model.windows[0][1]["hint"] == ""
 
 
 def test_a_reader_for_dictation_lifts_a_quiet_microphone_and_lets_whisper_skip_what_is_not_speech():
@@ -114,14 +133,19 @@ def test_a_reader_for_dictation_lifts_a_quiet_microphone_and_lets_whisper_skip_w
     assert options["vad_filter"] is True
 
 
-def test_a_closer_reading_lifts_a_quiet_microphone_and_lets_whisper_call_nothing_silence():
+def test_a_closer_reading_lifts_a_quiet_microphone():
     model = _Model("next")
 
     WhisperReader(load=lambda: model).read_closely(QUIET_PCM, "next")
 
-    [(samples, options)] = model.asked
+    [(samples, _options)] = model.windows
     assert samples == pytest.approx([0.0, 0.95, -0.95, 0.0])
-    assert (options["no_speech_threshold"], options["vad_filter"]) == (None, False)
+
+
+def test_what_whisper_hears_as_silence_reads_as_nothing_unless_it_listens_closer():
+    reader = WhisperReader(load=lambda: _Model("thank you", heard_as_silence=True))
+
+    assert (reader(QUIET_PCM, "next"), reader.read_closely(QUIET_PCM, "next")) == ("", "thank you")
 
 
 def test_a_reader_for_commands_leaves_the_audio_as_it_was_recorded():
@@ -129,17 +153,17 @@ def test_a_reader_for_commands_leaves_the_audio_as_it_was_recorded():
 
     WhisperReader(load=lambda: model)(QUIET_PCM, "next")
 
-    assert model.asked[0][1]["vad_filter"] is False
+    assert model.windows[0][0] == pytest.approx([0.0, 0.5, -0.5, 0.0])
 
 
-def test_a_command_is_read_once_never_again_at_higher_temperatures():
+def test_a_command_is_read_once_and_whisper_is_never_asked_to_transcribe_it():
     model = _Model("next")
     reader = WhisperReader(load=lambda: model)
 
     reader(QUIET_PCM, "next")
     reader.read_closely(QUIET_PCM, "next")
 
-    assert [options["temperature"] for _samples, options in model.asked] == [0.0, 0.0]
+    assert (len(model.windows), model.asked) == (2, [])
 
 
 def test_a_command_reading_stops_after_a_few_tellings_of_the_longest_phrase():
@@ -149,7 +173,7 @@ def test_a_command_reading_stops_after_a_few_tellings_of_the_longest_phrase():
     reader(QUIET_PCM, "next")
     reader.read_closely(QUIET_PCM, "next")
 
-    assert [options["max_new_tokens"] for _samples, options in model.asked] == [48, 48]
+    assert [options["max_new_tokens"] for _samples, options in model.windows] == [48, 48]
 
 
 def test_dictation_is_taken_down_as_whisper_would_take_it_down_anyway():
@@ -227,7 +251,7 @@ def test_a_reader_for_another_language_reads_in_it():
 
     WhisperReader(load=lambda: model, language="de")(QUIET_PCM, "Genau.")
 
-    assert model.asked[0][1]["language"] == "de"
+    assert model.windows[0][1]["language"] == "de"
 
 
 def test_a_reader_for_another_language_loads_the_model_that_read_his_german(monkeypatch):
