@@ -21,6 +21,11 @@ def test_a_phrase_the_engine_repeated_is_still_that_phrase():
     assert chosen_among("left next, left next, left next.", ("left next",)) == "left next"
 
 
+def test_a_phrase_repeated_until_the_reading_was_cut_short_is_still_that_phrase():
+    assert chosen_among("Left next. Left next. Left", ("left next",)) == "left next"
+    assert chosen_among("Left. Left next.", ("left next",)) is None
+
+
 def test_the_word_a_microphone_click_became_at_either_end_of_a_reading_is_no_part_of_it():
     assert chosen_among("And enter VR.", ("enter vr",)) == "enter vr"
     assert chosen_among("The next, uh", ("next",)) == "next"

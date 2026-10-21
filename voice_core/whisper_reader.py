@@ -30,6 +30,13 @@ OTHER_LANGUAGE_MODEL = "small"
 _FULL_LEVEL = 0.95
 _SILENCE = 1e-4
 
+# Whisper reads again at five rising temperatures whenever it doubts a reading; for a command
+# that is one random sample after another, and on his recordings it was the slowest part of a
+# reading: one decode settled his Genau clips in half the time and acted on the same commands.
+# The longest phrase an app had was 10 tokens, and a reading that runs on past a few tellings of
+# one is whisper repeating itself, so it is stopped there.
+_A_COMMAND_IS_READ_ONCE = {"temperature": 0.0, "max_new_tokens": 48}
+
 
 def faster_whisper(module: str = "faster_whisper"):
     # faster-whisper needs no torch but imports any it finds, and a torch that loads
@@ -94,10 +101,13 @@ class WhisperReader:
             logger.info("Voice: whisper loaded in %.1fs", self._clock() - began)
 
     def __call__(self, pcm: bytes, hint: str) -> str:
-        return self._read(pcm, hint, lifted=self._for_dictation, vad_filter=self._for_dictation)
+        if self._for_dictation:
+            return self._read(pcm, hint, lifted=True, vad_filter=True)
+        return self._read(pcm, hint, lifted=False, vad_filter=False, **_A_COMMAND_IS_READ_ONCE)
 
     def read_closely(self, pcm: bytes, hint: str) -> str:
-        return self._read(pcm, hint, lifted=True, vad_filter=False, no_speech_threshold=None)
+        return self._read(pcm, hint, lifted=True, vad_filter=False, no_speech_threshold=None,
+                          **_A_COMMAND_IS_READ_ONCE)
 
     def _read(self, pcm: bytes, hint: str, *, lifted: bool, **whisper_options: Any) -> str:
         self.preload()
