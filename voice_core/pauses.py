@@ -49,6 +49,7 @@ class PauseSegmenter:
         self._hears_speech = hears_speech
         self._speaker_heard = False
         self._since_the_speaker = 0
+        self.speaker_was_heard: bool | None = None
 
     @property
     def speaking(self) -> bool:
@@ -91,6 +92,8 @@ class PauseSegmenter:
 
     def _take(self) -> bytes | None:
         utterance = b"".join(self._frames) if self.holds_speech else None
+        if self._hears_speech is not None:
+            self.speaker_was_heard = self._speaker_heard
         self._frames, self._speech_frames, self._quiet_run = [], 0, 0
         self._speaker_heard, self._since_the_speaker = False, 0
         return utterance

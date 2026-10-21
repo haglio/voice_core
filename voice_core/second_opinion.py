@@ -81,6 +81,9 @@ def settle(heard: Heard, *, rules: CommandRules, read: Callable[[bytes, str], st
     stands_alone = bool(first.phrase and rules.stands_alone and rules.stands_alone(first.phrase))
     if stands_alone or not heard.candidates:
         return heard
+    if heard.speaker_heard is False:
+        return replace(heard, recognition=replace(
+            first, phrase=None, rank=0, unconfirmed_phrase=first.phrase))
     audio = heard.phrase_audio or heard.audio
     candidates = tuple(heard.candidates)
     readers_in = readers_in or {}

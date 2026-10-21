@@ -71,6 +71,22 @@ def test_a_phrase_the_app_lets_stand_alone_is_not_put_to_the_second_engine():
     assert settle(heard, rules=RULES, read=_never_asked) == heard
 
 
+def test_a_command_heard_where_nobody_was_heard_speaking_is_neither_read_nor_acted_on():
+    heard = replace(_heard(Recognition(phrase="next", heard="next"), {"next": 0}),
+                    speaker_heard=False)
+
+    settled = settle(heard, rules=RULES, read=_never_asked)
+
+    assert settled.recognition == Recognition(unconfirmed_phrase="next", heard="next")
+
+
+def test_a_phrase_the_app_lets_stand_alone_is_acted_on_whether_or_not_anybody_was_heard():
+    heard = replace(_heard(Recognition(phrase="left next", heard="left next"), {"left next": 0}),
+                    speaker_heard=False)
+
+    assert settle(heard, rules=RULES, read=_never_asked) == heard
+
+
 def test_a_first_choice_the_second_engine_also_reads_is_the_command():
     heard = _heard(Recognition(phrase="next", heard="next"), {"next": 0, "lock": 2})
     asked = []
