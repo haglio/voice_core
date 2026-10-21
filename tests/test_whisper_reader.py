@@ -132,6 +132,35 @@ def test_a_reader_for_commands_leaves_the_audio_as_it_was_recorded():
     assert model.asked[0][1]["vad_filter"] is False
 
 
+def test_a_command_is_read_once_never_again_at_higher_temperatures():
+    model = _Model("next")
+    reader = WhisperReader(load=lambda: model)
+
+    reader(QUIET_PCM, "next")
+    reader.read_closely(QUIET_PCM, "next")
+
+    assert [options["temperature"] for _samples, options in model.asked] == [0.0, 0.0]
+
+
+def test_a_command_reading_stops_after_a_few_tellings_of_the_longest_phrase():
+    model = _Model("next")
+    reader = WhisperReader(load=lambda: model)
+
+    reader(QUIET_PCM, "next")
+    reader.read_closely(QUIET_PCM, "next")
+
+    assert [options["max_new_tokens"] for _samples, options in model.asked] == [48, 48]
+
+
+def test_dictation_is_taken_down_as_whisper_would_take_it_down_anyway():
+    model = _Model("make the sky darker")
+
+    WhisperReader(load=lambda: model, for_dictation=True)(QUIET_PCM, "")
+
+    [(_samples, options)] = model.asked
+    assert {"temperature", "max_new_tokens"}.isdisjoint(options)
+
+
 def test_lifting_silence_does_not_divide_by_nothing():
     model = _Model("")
 
