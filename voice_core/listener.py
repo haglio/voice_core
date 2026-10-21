@@ -97,6 +97,9 @@ class Engines:
     second_opinion_in: Mapping[str, Callable[[bytes, str], str]] = field(default_factory=dict)
     # Reads an utterance's audio as ordinary speech, given the app's standing hint.
     take_down: Callable[[bytes, str], str] | None = None
+    # Says of each frame whether somebody is speaking, so an utterance ends when the speaker
+    # pauses even in a room loud enough to hold it open (speech.hears_speech).
+    hears_speech: Callable[[bytes], bool] | None = None
 
 
 class CommandListener:
@@ -112,6 +115,7 @@ class CommandListener:
         self._second_opinion = engines.second_opinion
         self._second_opinion_in = dict(engines.second_opinion_in)
         self._take_down = engines.take_down
+        self._hears_speech = engines.hears_speech
         self._second_engines = tuple(
             engine for engine in (engines.second_opinion, engines.take_down,
                                   *engines.second_opinion_in.values())
@@ -262,7 +266,8 @@ class CommandListener:
             unrestricted = self._vosk.KaldiRecognizer(model, sample_rate)
             unrestricted.SetWords(True)
         return Listening(self._rules, Recognizers(recognizer, unrestricted, sample_rate),
-                         PauseSegmenter(self._settings.pauses), on_partial=self._events.partial,
+                         PauseSegmenter(self._settings.pauses, hears_speech=self._hears_speech),
+                         on_partial=self._events.partial,
                          for_dictation=self._takes_dictation()
                          and self._events.wants_words is None)
 

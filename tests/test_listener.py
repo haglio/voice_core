@@ -134,6 +134,20 @@ def test_running_hears_what_the_named_microphone_delivers_a_frame_at_a_time_unti
             opened[0]["dtype"], opened[0]["channels"]) == (0, 16000, FRAME, "int16", 1)
 
 
+ROOM_NOISE = array.array("h", [12000, -12000] * (FRAME // 2)).tobytes()
+
+
+def test_an_app_that_hands_over_a_speech_detector_hears_the_speaker_out_over_a_loud_room():
+    heard = []
+    room_and_speaker = [QUIET, ROOM_NOISE, VOICED, VOICED, ROOM_NOISE, ROOM_NOISE, ROOM_NOISE]
+
+    _listener(heard=heard.append,
+              engines=Engines(_vosk([]), _sounddevice([], room_and_speaker),
+                              hears_speech=lambda frame: frame == VOICED)).run()
+
+    assert [one.audio for one in heard] == [ROOM_NOISE + VOICED + VOICED + ROOM_NOISE * 2]
+
+
 def _run_until_heard(settings=SETTINGS, **events):
     built = []
     _listener(settings=settings, engines=Engines(_vosk(built), _sounddevice([], A_COMMAND)),
