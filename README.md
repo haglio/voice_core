@@ -57,9 +57,10 @@ half-second wait.
 A word from another language is one an English reading cannot place: the owner's German
 "genau" came back from whisper as English words every time, prompted with it or not.
 `CommandRules.said_in` names the language a phrase is said in, and `Engines.second_opinion_in`
-a reader for that language (`WhisperReader(language="de")`, which reads with `small`). A
-candidate the English readings turned down is read once more in its own language, prompted
-with its phrases written as a sentence. On the four kept clips of him saying Genau that read
+a reader for that language (`WhisperReader(language="de")`, which reads with `small`). Such a
+candidate is read in its own language, prompted with its phrases written as a sentence, as well
+as in English, and whichever language the likeliest candidate is said in reads first, so a Genau
+is not kept waiting behind two English readings that cannot place it. On the four kept clips of him saying Genau that read
 three where none had been, and over 3,000 utterances of his ordinary dictation the first
 engine proposed Genau in ten and the German reading agreed to none of them.
 

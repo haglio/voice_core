@@ -153,10 +153,31 @@ def _rules_with_genau_said_in_german():
 
 
 def test_a_phrase_said_in_another_language_that_english_turned_down_is_read_again_in_its_own():
-    heard = _heard(Recognition(phrase="go now mode", heard="go now mode"), {"go now mode": 0})
+    heard = _heard(Recognition(phrase="next", heard="next"), {"next": 0, "go now mode": 1})
 
     settled = settle(heard, rules=_rules_with_genau_said_in_german(),
                      read=lambda audio, hint: "Good night.",
+                     readers_in={"de": lambda audio, hint: "Genau Mode."})
+
+    assert settled.recognition.phrase == "go now mode"
+
+
+def test_a_phrase_its_own_language_turned_down_is_still_read_in_english():
+    heard = _heard(Recognition(phrase="go now", heard="go now"), {"go now": 0})
+
+    settled = settle(heard, rules=_rules_with_genau_said_in_german(),
+                     read=lambda audio, hint: "Go now.",
+                     readers_in={"de": lambda audio, hint: "Gute Nacht."})
+
+    assert settled == heard
+
+
+def test_the_language_of_the_likeliest_candidate_is_read_first():
+    heard = _heard(Recognition(phrase="go now mode", heard="go now mode"),
+                   {"go now mode": 0, "next": 2})
+
+    settled = settle(heard, rules=_rules_with_genau_said_in_german(),
+                     read=lambda audio, hint: "Next.",
                      readers_in={"de": lambda audio, hint: "Genau Mode."})
 
     assert settled == heard
