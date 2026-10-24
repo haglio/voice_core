@@ -23,9 +23,8 @@ jobs:
       python-version: "3.14"
       timeout-minutes: 5
 
-  # Fun Time and Origenerator, installed with the candidate over their own pins and
-  # every module they ship imported, so a release here that takes away what an app
-  # still uses is refused before it ships rather than met when the app moves its pin.
+  # Fun Time's and Origenerator's whole suites, with the candidate installed over their
+  # own pins: haglio/.github's apps-import.yml says how, once for every library.
   apps:
     uses: haglio/.github/.github/workflows/apps-import.yml@main
 
