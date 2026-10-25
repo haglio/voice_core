@@ -11,7 +11,7 @@ requires-python = ">=3.14"
 # app_support at the tag this repo was built against; every other requirement
 # with a ceiling, its floor what the family's machine holds today.
 dependencies = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.282",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.284",
     "sounddevice>=0.5,<0.6",
     "vosk>=0.3,<0.4",
 ]
@@ -42,5 +42,5 @@ include = ["voice_core*"]
 namespaces = false
 
 [tool.pytest.ini_options]
-addopts = "-p no:cacheprovider -p app_support.sanitize.pytest_plugin --timeout=60 --timeout-method=thread"
+addopts = "-p no:cacheprovider -p app_support.sanitize.pytest_plugin -p app_support.clocks.pytest_plugin --timeout=60 --timeout-method=thread"
 testpaths = ["tests"]
