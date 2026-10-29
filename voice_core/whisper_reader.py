@@ -105,9 +105,9 @@ def faster_whisper(module: str = "faster_whisper"):
 
 def load_faster_whisper(model_size: str):
     whisper_model = faster_whisper().WhisperModel
-    # On the CPU by design: the one GPU is for pictures and Funestras. A reading took a median
-    # 0.43 s on two threads, 0.33 s on four and 0.27 s on eight (this machine, 2026-09-18):
-    # four is most of the gain and leaves the Funestras their cores.
+    # On the CPU by design: the one GPU is for images, videos and Funestras. A reading took
+    # a median 0.43 s on two threads, 0.33 s on four and 0.27 s on eight (this machine,
+    # 2026-09-18): four is most of the gain and leaves the Funestras their cores.
     on_this_machine = partial(whisper_model, model_size, device="cpu", compute_type="int8",
                               cpu_threads=4)
     try:
