@@ -11,7 +11,7 @@ from voice_core.commands import CommandRules, Recognition
 from voice_core.listening import PHRASE_MARGIN_S, Heard, Listening, Recognizers, outcome_line
 from voice_core.pauses import PauseSegmenter, PauseSettings
 
-RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_rescued=lambda phrase: False)
+RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_repaired=lambda phrase: False)
 RATE = 16000
 FRAME = 480
 A_FRAME = FRAME / RATE

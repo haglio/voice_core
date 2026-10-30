@@ -52,7 +52,7 @@ def test_a_phrase_spelled_by_sound_for_the_first_listener_is_matched_as_the_app_
 
 RULES = CommandRules(
     phrases=frozenset({"next", "lock", "left next", "quit"}),
-    never_rescued=frozenset({"quit"}).__contains__,
+    never_repaired=frozenset({"quit"}).__contains__,
     stands_alone=lambda phrase: " " in phrase,
 )
 AUDIO = b"\x01\x00" * 8
@@ -156,7 +156,7 @@ def test_where_the_listeners_disagree_the_verifying_listeners_choice_among_the_r
 
 
 def test_the_verifying_listener_is_shown_each_phrase_as_the_app_writes_it():
-    rules = CommandRules(phrases=frozenset({"go now"}), never_rescued=RULES.never_rescued,
+    rules = CommandRules(phrases=frozenset({"go now"}), never_repaired=RULES.never_repaired,
                          written={"go now": "genau"}.get)
     heard = _heard(Recognition(phrase="go now", heard="go now"), {"go now": 0})
     hints = []
@@ -168,7 +168,7 @@ def test_the_verifying_listener_is_shown_each_phrase_as_the_app_writes_it():
 
 def _rules_with_genau_said_in_german():
     return CommandRules(
-        phrases=frozenset({"go now", "go now mode", "next"}), never_rescued=RULES.never_rescued,
+        phrases=frozenset({"go now", "go now mode", "next"}), never_repaired=RULES.never_repaired,
         written={"go now": "genau", "go now mode": "genau mode"}.get,
         said_in={"go now": "de", "go now mode": "de"}.get)
 
