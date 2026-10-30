@@ -4,6 +4,7 @@ import math
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 
+from voice_core.old_names import answers_to_old_names
 from voice_core.readings import UNKNOWN, Hypothesis, hypotheses
 
 # The noise suppressor on his microphone cuts to digital silence between
@@ -11,10 +12,11 @@ from voice_core.readings import UNKNOWN, Hypothesis, hypotheses
 SILENT_UTTERANCE_PEAK = 300
 
 
+@answers_to_old_names(never_rescued="never_repaired")
 @dataclass(frozen=True)
 class CommandRules:
     phrases: frozenset[str]
-    never_rescued: Callable[[str], bool]
+    never_repaired: Callable[[str], bool]
     confidence_threshold: float = 0.7
     silent_peak: int = SILENT_UTTERANCE_PEAK
     # With a verifying listener: the phrases taken on the first listener's word alone.
@@ -56,7 +58,7 @@ def interpret(grammar_json: str, free_json: str, *, rules: CommandRules, peak: i
         if hypothesis.confidences and not _clears(hypothesis.confidences, rules.confidence_threshold):
             # A lower-ranked reading is less likely still, so this ends the search.
             return Recognition(refused_phrase=hypothesis.text, heard=spoken, free_text=free_text)
-        if rank and (rules.never_rescued(hypothesis.text)
+        if rank and (rules.never_repaired(hypothesis.text)
                      or not _shares_a_word(hypothesis.text, spoken)):
             continue
         return Recognition(phrase=hypothesis.text, rank=rank, heard=spoken)
@@ -116,6 +118,6 @@ def candidates(grammar_json: str, *, rules: CommandRules, peak: int) -> dict[str
         return {}
     found: dict[str, int] = {}
     for rank, reading in enumerate(_as_said(hypotheses(grammar_json), rules)):
-        if reading.text in rules.phrases and not (rank and rules.never_rescued(reading.text)):
+        if reading.text in rules.phrases and not (rank and rules.never_repaired(reading.text)):
             found.setdefault(reading.text, rank)
     return found

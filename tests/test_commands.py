@@ -15,7 +15,7 @@ SPOKEN = 2000
 RULES = CommandRules(
     phrases=frozenset({"left next", "left lock", "next", "skip", "quit", "help", "amp up",
                        "park it", "main reset", "main video mode"}),
-    never_rescued=frozenset({"quit", "park it", "main reset"}).__contains__,
+    never_repaired=frozenset({"quit", "park it", "main reset"}).__contains__,
 )
 
 
@@ -192,3 +192,11 @@ def test_what_was_heard_is_the_first_reading_with_words_left_in_it():
     heard = interpret(_ranked("the", "left net", "left next"), "", rules=RULES, peak=SPOKEN)
 
     assert heard == Recognition(phrase="left next", rank=2, heard="left net")
+
+
+def test_an_app_still_saying_never_rescued_rules_out_the_same_repairs():
+    ruled_out = frozenset({"quit"}).__contains__
+
+    rules = CommandRules(phrases=frozenset({"quit", "next"}), never_rescued=ruled_out)
+
+    assert rules.never_repaired is rules.never_rescued is ruled_out

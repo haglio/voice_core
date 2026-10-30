@@ -12,7 +12,7 @@ from voice_core.listener import CommandListener, ListenerEvents, ListenerSetting
 from voice_core.listening_thread import ListeningThread
 
 rules = CommandRules(phrases=frozenset({"next", "left next", "quit"}),
-                     never_rescued={"quit"}.__contains__)
+                     never_repaired={"quit"}.__contains__)
 events = ListenerEvents(heard=on_heard)
 listening = ListeningThread(lambda: CommandListener(
     rules,

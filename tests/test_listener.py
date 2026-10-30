@@ -32,7 +32,7 @@ from voice_core.listening import PHRASE_MARGIN_S
 from voice_core.speech import HearsSpeech
 from voice_core.whisper_reader import WhisperReader
 
-RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_rescued=lambda phrase: False)
+RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_repaired=lambda phrase: False)
 STALLED_FOR = 11.0
 FRAME = 480
 VOICED = array.array("h", [2000, -2000] * (FRAME // 2)).tobytes()
