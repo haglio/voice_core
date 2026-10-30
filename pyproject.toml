@@ -29,7 +29,7 @@ whisper = [
     "numpy>=2.4,<3",
 ]
 dev = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.307",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.317",
     "numpy>=2.4,<3",
     "pytest>=9,<10",
     "pytest-cov>=7,<8",
@@ -46,5 +46,5 @@ include = ["voice_core*"]
 namespaces = false
 
 [tool.pytest.ini_options]
-addopts = "-p no:cacheprovider -p app_support.sanitize.pytest_plugin -p app_support.clocks.pytest_plugin -p app_support.coverage_gate --cov --cov-report= --timeout=60 --timeout-method=thread"
+addopts = "-p no:cacheprovider -p app_support.sanitize.pytest_plugin -p app_support.gates.pytest_plugin -p app_support.coverage_gate --cov --cov-report= --timeout=60 --timeout-method=thread"
 testpaths = ["tests"]

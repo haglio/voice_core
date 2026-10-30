@@ -28,7 +28,7 @@ def _git(*args: str) -> str:
 def _current() -> str | None:
     got = subprocess.run(
         ["git", "config", "--local", "core.hooksPath"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, check=False,
     )
     return got.stdout.strip() or None
 
@@ -40,7 +40,7 @@ def main(argv: list[str]) -> int:
         return 1
 
     if "--uninstall" in argv:
-        subprocess.run(["git", "config", "--local", "--unset", "core.hooksPath"])
+        subprocess.run(["git", "config", "--local", "--unset", "core.hooksPath"], check=False)
         print("core.hooksPath unset; git is back to .git/hooks")
         return 0
 
