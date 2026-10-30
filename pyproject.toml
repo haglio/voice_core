@@ -19,9 +19,9 @@ dependencies = [
 [tool.setuptools_scm]
 
 [project.optional-dependencies]
-# The second engine: an app that wants its commands double-checked, or speech taken
-# down that no phrase list holds, asks for this; one that only hears a phrase list
-# does not pay for it.
+# The verifying listener, and the reader taking speech down: an app that wants its
+# commands double-checked, or speech taken down that no phrase list holds, asks for
+# this; one that only hears a phrase list does not pay for it.
 whisper = [
     "faster-whisper>=1,<2",
     "numpy>=2.4,<3",

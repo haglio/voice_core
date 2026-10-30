@@ -90,7 +90,7 @@ def _timed(*words):
         "result": [{"word": word, "start": start, "end": end} for word, start, end in words]}]})
 
 
-def test_the_stretch_a_phrase_was_said_in_is_kept_for_the_second_engine_with_a_margin():
+def test_the_stretch_a_phrase_was_said_in_is_kept_for_the_verifying_listener_with_a_margin():
     utterance_starts_on_the_stream_at = A_FRAME
     said_from, said_to = 0.90, 1.20
     recognizer = _Recognizer(_timed(
@@ -327,7 +327,7 @@ def test_what_was_heard_and_not_acted_on_is_logged_by_its_length_never_its_words
     )]
 
     assert lines == [
-        "Voice: heard a 1-word command but the second engine read 3 words (peak 2000)",
+        "Voice: heard a 1-word command but the verifying listener read 3 words (peak 2000)",
         ("Voice: heard a 1-word command but its confidence was under 0.70 "
          "(unrestricted reading 3 words, peak 2000)"),
         "Unrecognized speech: 2 words (unrestricted reading 3 words, peak 2000)",

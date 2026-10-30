@@ -17,11 +17,12 @@ from voice_core.commands import CommandRules
 from voice_core.listening import Heard, Listening, Recognizers, outcome_line
 from voice_core.microphone import probe_input_device, resolve_input_device
 from voice_core.miss_clips import save_miss_audio
+from voice_core.old_names import answers_to_old_names
 from voice_core.pauses import PauseSegmenter, PauseSettings
 from voice_core.readings import build_grammar
-from voice_core.second_opinion import settle
 from voice_core.sound_library import load_sounddevice
 from voice_core.speech import hears_speech
+from voice_core.verifying_listener import settle
 from voice_core.whisper_reader import WhisperReader
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ GRAMMAR_ALTERNATIVES = 5
 LISTEN_HEARTBEAT_S = 60.0
 
 # How long a closing listener waits for a reading already under way.
-SECOND_OPINION_PATIENCE_S = 5.0
+READING_PATIENCE_S = 5.0
 
 
 class RecognizerUnavailable(Exception):
@@ -88,15 +89,15 @@ class ListenerEvents:
     wants_words: Callable[[Heard], bool] | None = None
 
 
+@answers_to_old_names(second_opinion="verifying_listener",
+                      second_opinion_in="verifying_listener_in")
 @dataclass(frozen=True)
 class Engines:
     vosk: Any = None
     sounddevice: Any = None
     clock: Callable[[], float] = time.monotonic
-    # Reads an utterance's audio given a hint of phrases; see second_opinion.settle.
-    second_opinion: Callable[[bytes, str], str] | None = None
-    # By language: reads a phrase said in it (CommandRules.said_in) that the second turned down.
-    second_opinion_in: Mapping[str, Callable[[bytes, str], str]] = field(default_factory=dict)
+    verifying_listener: Callable[[bytes, str], str] | None = None
+    verifying_listener_in: Mapping[str, Callable[[bytes, str], str]] = field(default_factory=dict)
     # Reads an utterance's audio as ordinary speech, given the app's standing hint.
     take_down: Callable[[bytes, str], str] | None = None
     # Says of each frame whether somebody is speaking, so an utterance ends when the speaker
@@ -104,13 +105,14 @@ class Engines:
     hears_speech: Callable[[bytes], bool] | None = None
 
 
+@answers_to_old_names(second_opinion="verifying_listener")
 def engines_for(rules: CommandRules, events: ListenerEvents, *,
                 clock: Callable[[], float] = time.monotonic,
-                second_opinion: Callable[[bytes, str], str] | None = None) -> Engines:
+                verifying_listener: Callable[[bytes, str], str] | None = None) -> Engines:
     return Engines(clock=clock,
-                   second_opinion=second_opinion or WhisperReader(),
-                   second_opinion_in={language: WhisperReader(language=language)
-                                      for language in rules.other_languages()},
+                   verifying_listener=verifying_listener or WhisperReader(),
+                   verifying_listener_in={language: WhisperReader(language=language)
+                                          for language in rules.other_languages()},
                    take_down=WhisperReader(for_dictation=True) if events.speech else None,
                    hears_speech=hears_speech())
 
@@ -125,21 +127,21 @@ class CommandListener:
         self._vosk = engines.vosk
         self._sounddevice = engines.sounddevice
         self._clock = engines.clock
-        self._second_opinion = engines.second_opinion
-        self._second_opinion_in = dict(engines.second_opinion_in)
+        self._verifying_listener = engines.verifying_listener
+        self._verifying_listener_in = dict(engines.verifying_listener_in)
         self._take_down = engines.take_down
         self._hears_speech = engines.hears_speech
-        self._second_engines = tuple(
-            engine for engine in (engines.second_opinion, engines.take_down,
-                                  *engines.second_opinion_in.values())
-            if engine is not None)
+        self._readers = tuple(
+            reader for reader in (engines.verifying_listener, engines.take_down,
+                                  *engines.verifying_listener_in.values())
+            if reader is not None)
         self._stop = threading.Event()
 
     def stop(self) -> None:
         self._stop.set()
 
     def run(self) -> None:
-        self._start_loading_the_second_engines()
+        self._start_loading_the_readers()
         try:
             self._vosk = self._vosk or importlib.import_module("vosk")
             self._sounddevice = self._sounddevice or load_sounddevice()
@@ -178,51 +180,52 @@ class CommandListener:
 
     @contextmanager
     def _delivery(self):
-        """How a settled utterance reaches the app: at once, or -- a second engine taking
-        its second over each -- from one thread of its own, in the order they were spoken."""
-        if not self._second_engines:
+        """How a settled utterance reaches the app: at once, or -- readers taking their
+        time over each -- from one thread of its own, in the order they were spoken."""
+        if not self._readers:
             yield self._deliver
             return
         waiting: queue.Queue[Heard | None] = queue.Queue()
 
         def in_order() -> None:
-            self._finish_loading_the_second_engines()
+            self._finish_loading_the_readers()
             while (heard := waiting.get()) is not None:
                 self._deliver(self._settled(heard))
 
-        worker = threading.Thread(target=in_order, name="voice-second-opinion", daemon=True)
+        worker = threading.Thread(target=in_order, name="voice-readers", daemon=True)
         worker.start()
         try:
             yield waiting.put
         finally:
             waiting.put(None)
-            worker.join(timeout=SECOND_OPINION_PATIENCE_S)
+            worker.join(timeout=READING_PATIENCE_S)
 
-    def _start_loading_the_second_engines(self) -> None:
-        for engine in self._second_engines:
-            load_ahead = getattr(engine, "load_ahead", None)
+    def _start_loading_the_readers(self) -> None:
+        for reader in self._readers:
+            load_ahead = getattr(reader, "load_ahead", None)
             if load_ahead is not None:
                 load_ahead()
 
-    def _finish_loading_the_second_engines(self) -> None:
-        for engine in self._second_engines:
-            preload = getattr(engine, "preload", None)
+    def _finish_loading_the_readers(self) -> None:
+        for reader in self._readers:
+            preload = getattr(reader, "preload", None)
             if preload is None:
                 continue
             try:
                 preload()
             except Exception:
-                logger.exception("Voice: the second engine did not load")
+                logger.exception("Voice: a reader did not load")
 
     def _settled(self, heard: Heard) -> Heard:
-        if self._second_opinion is None:
+        if self._verifying_listener is None:
             return heard
         try:
-            return settle(heard, rules=self._rules, read=self._second_opinion,
-                          read_closely=getattr(self._second_opinion, "read_closely", None),
-                          readers_in=self._second_opinion_in)
+            return settle(heard, rules=self._rules, read=self._verifying_listener,
+                          read_closely=getattr(self._verifying_listener, "read_closely", None),
+                          readers_in=self._verifying_listener_in)
         except Exception:
-            logger.exception("Voice: the second engine failed; the first engine's word stands")
+            logger.exception(
+                "Voice: the verifying listener failed; the first listener's word stands")
             return heard
 
     def _deliver(self, heard: Heard) -> None:
