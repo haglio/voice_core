@@ -24,10 +24,10 @@ listening = ListeningThread(lambda: CommandListener(
 listening.start()
 ```
 
-`engines_for` gives every app the same engines: whisper reading each command a second
-time, a reader for each language its rules say a phrase in, one taking speech down for an
-app that asks for speech, and a speech detector that ends an utterance when its speaker
-pauses, however loud the room stays.
+`engines_for` gives every app the same engines: the verifying listener, which is whisper
+reading each command a second time, with a reader for each language its rules say a phrase
+in; one taking speech down for an app that asks for speech; and a speech detector that ends
+an utterance when its speaker pauses, however loud the room stays.
 
 `ListeningThread` runs a listener on a thread of its own and can be stopped and started
 again, each start with a fresh listener; `stop()` waits for the microphone to close, though
@@ -37,7 +37,7 @@ never on a listener that has wedged. `on_failure` receives what ended the listen
 `on_heard` receives a `Heard`: the `Recognition` (the phrase that was said, or which
 kind of miss it was), when the utterance began, how loud it was, and its audio.
 
-## Two engines, because neither is good alone
+## Two listeners, because neither is good alone
 
 Measured on recordings of the owner's voice (see CLAUDE.md for where they are and
 why nothing else counts):
@@ -50,27 +50,27 @@ why nothing else counts):
 
 Vosk takes a phrase list of any length and reads a cough as a one-word command.
 Whisper's prompt holds 223 tokens and drags ordinary speech onto whatever it names.
-So vosk proposes -- every phrase among its five ranked readings is a candidate -- and
-whisper, prompted with just that utterance's candidates and handed only the stretch of it
-vosk heard them in, picks one or refuses them all; before refusing, it reads the stretch
-again lifted to full level, where it may not call anything silence
-(`second_opinion.settle`). Over 1,196 utterances of the owner's ordinary dictation that let
-14 through where one reading of the whole utterance let 12, and it read the command in 4 of
-11 kept clips of commands the one reading had doubted, against 2.
+So vosk, the first listener, proposes -- every phrase among its five ranked readings is a
+candidate -- and whisper, the verifying listener, prompted with just that utterance's
+candidates and handed only the stretch of it vosk heard them in, picks one or refuses them
+all; before refusing, it reads the stretch again lifted to full level, where it may not call
+anything silence (`verifying_listener.settle`). Over 1,196 utterances of the owner's
+ordinary dictation that let 14 through where one reading of the whole utterance let 12, and
+it read the command in 4 of 11 kept clips of commands the one reading had doubted, against 2.
 `CommandRules.stands_alone` names the phrases an app wants acted on without that
 half-second wait.
 
 A word from another language is one an English reading cannot place: the owner's German
 "genau" came back from whisper as English words every time, prompted with it or not.
-`CommandRules.said_in` names the language a phrase is said in, and `Engines.second_opinion_in`
+`CommandRules.said_in` names the language a phrase is said in, and `Engines.verifying_listener_in`
 a reader for that language (`WhisperReader(language="de")`, which reads with `small`). Such a
 candidate is read in its own language, prompted with its phrases written as a sentence, as well
 as in English, and whichever language the likeliest candidate is said in reads first, so a Genau
 is not kept waiting behind two English readings that cannot place it. On the four kept clips of him saying Genau that read
 three where none had been, and over 3,000 utterances of his ordinary dictation the first
-engine proposed Genau in ten and the German reading agreed to none of them.
+listener proposed Genau in ten and the German reading agreed to none of them.
 
-Without `Engines.second_opinion` the listener is vosk alone, with the guards Fun Time
+Without `Engines.verifying_listener` vosk listens alone, with the guards Fun Time
 grew: a lower-ranked reading is taken only when it shares a word with the first and the
 app has not ruled the phrase out of repairs, and an utterance quieter than
 `SILENT_UTTERANCE_PEAK` is set aside.
@@ -82,5 +82,5 @@ An app names a tag of this repo in its `[project.dependencies]`:
     "voice-core @ git+https://github.com/haglio/voice_core@v0.1.N"
 
 and asks for the `whisper` extra (or `faster-whisper` itself) where it wants the
-second engine. The vosk model is downloaded by vosk on first use; whisper's by
+verifying listener. The vosk model is downloaded by vosk on first use; whisper's by
 faster-whisper.

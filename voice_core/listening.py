@@ -19,7 +19,8 @@ class Heard:
     spoken_at: float
     peak: int
     audio: bytes
-    # Every phrase among the ranked readings, with its rank: what a second engine may choose from.
+    # Every phrase among the ranked readings, with its rank: what the verifying listener may
+    # choose from.
     candidates: Mapping[str, int]
     phrase_audio: bytes = b""
     words_formed: bool = False
@@ -148,7 +149,7 @@ def outcome_line(heard: Heard, *, now: float, rules: CommandRules) -> tuple[int,
             f"(spoken {now - heard.spoken_at:.2f}s before recognition{ended}, peak {peak})")
     if recognition.unconfirmed_phrase:
         why = ("where nobody was heard speaking" if heard.speaker_heard is False
-               else f"but the second engine read {unrestricted}")
+               else f"but the verifying listener read {unrestricted}")
         return logging.INFO, (
             f"Voice: heard a {_count(recognition.unconfirmed_phrase)}-word command {why} "
             f"(peak {peak})")

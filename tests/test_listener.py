@@ -382,36 +382,36 @@ def test_what_the_microphone_delivered_is_kept_though_the_driver_reuses_its_buff
     assert [one.audio for one in heard] == [ITS_AUDIO]
 
 
-def test_a_second_engine_settles_each_utterance_before_the_app_hears_of_it(tmp_path):
+def test_the_verifying_listener_settles_each_utterance_before_the_app_hears_of_it(tmp_path):
     heard, asked = [], []
 
-    def second_opinion(audio, hint):
+    def verifying_listener(audio, hint):
         asked.append((len(audio), hint))
         return "and then"
 
     _listener(settings=replace(SETTINGS, miss_dir=tmp_path), heard=heard.append,
               engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
-                              second_opinion=second_opinion)).run()
+                              verifying_listener=verifying_listener)).run()
 
     assert asked == [(len(ITS_AUDIO), "next")]
     assert [one.recognition.unconfirmed_phrase for one in heard] == ["next"]
     assert len(list(tmp_path.glob("*.wav"))) == 1
 
 
-def test_a_second_engine_that_fails_leaves_the_first_engines_word_standing(caplog):
+def test_a_verifying_listener_that_fails_leaves_the_first_listeners_word_standing(caplog):
     heard = []
     failing = Mock(side_effect=ModuleNotFoundError("No module named 'faster_whisper'"))
 
     with caplog.at_level(logging.ERROR, logger="voice_core.listener"):
         _listener(heard=heard.append,
                   engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
-                                  second_opinion=failing)).run()
+                                  verifying_listener=failing)).run()
 
     assert [one.recognition.phrase for one in heard] == ["next"]
     assert "No module named 'faster_whisper'" in caplog.text
 
 
-def test_the_stretch_the_second_engine_reads_is_measured_at_the_microphones_own_rate():
+def test_the_stretch_the_verifying_listener_reads_is_measured_at_the_microphones_own_rate():
     rate, frame_seconds = 8000, FRAME / 8000
     heard = []
 
@@ -423,7 +423,7 @@ def test_the_stretch_the_second_engine_reads_is_measured_at_the_microphones_own_
     assert one.phrase_audio == one.audio[round((1.0 - PHRASE_MARGIN_S) * rate) * 2:]
 
 
-def test_a_second_engine_that_can_listen_closer_does_when_its_first_reading_chose_nothing():
+def test_a_verifying_listener_that_can_listen_closer_does_when_its_first_reading_chose_nothing():
     heard = []
 
     class _Reader:
@@ -434,12 +434,12 @@ def test_a_second_engine_that_can_listen_closer_does_when_its_first_reading_chos
             return hint
 
     _listener(heard=heard.append, engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
-                                                  second_opinion=_Reader())).run()
+                                                  verifying_listener=_Reader())).run()
 
     assert [one.recognition.phrase for one in heard] == ["next"]
 
 
-def test_a_second_engine_has_finished_loading_before_the_first_utterance_is_put_to_it():
+def test_the_verifying_listener_has_finished_loading_before_the_first_utterance_is_put_to_it():
     order = []
 
     class _Reader:
@@ -451,17 +451,17 @@ def test_a_second_engine_has_finished_loading_before_the_first_utterance_is_put_
             return hint
 
     _listener(engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
-                              second_opinion=_Reader())).run()
+                              verifying_listener=_Reader())).run()
 
     assert order == ["loaded", "asked"]
 
 
-def test_a_second_engine_starts_loading_before_the_first_engine_loads_its_model():
+def test_the_verifying_listener_starts_loading_before_the_first_listener_loads_its_model():
     order = []
 
     class _Reader:
         def load_ahead(self):
-            order.append("second engine loading")
+            order.append("verifying listener loading")
 
         def preload(self):
             pass
@@ -470,11 +470,12 @@ def test_a_second_engine_starts_loading_before_the_first_engine_loads_its_model(
             return hint
 
     vosk = _vosk([])
-    vosk.Model = lambda model_name: order.append("first engine loading") or model_name
+    vosk.Model = lambda model_name: order.append("first listener loading") or model_name
 
-    _listener(engines=Engines(vosk, _sounddevice([], A_COMMAND), second_opinion=_Reader())).run()
+    _listener(engines=Engines(vosk, _sounddevice([], A_COMMAND),
+                              verifying_listener=_Reader())).run()
 
-    assert order == ["second engine loading", "first engine loading"]
+    assert order == ["verifying listener loading", "first listener loading"]
 
 
 def test_an_utterance_that_is_no_command_is_taken_down_for_an_app_that_wants_speech():
@@ -615,7 +616,7 @@ def test_a_breath_read_twice_is_a_command_to_an_app_that_takes_dictation_only_wh
     assert recognition.phrase == "next"
 
 
-def test_a_phrase_said_in_another_language_is_read_in_it_by_the_engine_handed_in_for_it():
+def test_a_phrase_said_in_another_language_is_read_in_it_by_the_verifying_listener_handed_in_for_it():
     heard, order = [], []
 
     class _German:
@@ -628,8 +629,8 @@ def test_a_phrase_said_in_another_language_is_read_in_it_by_the_engine_handed_in
 
     _listener(rules=replace(RULES, said_in={"next": "de"}.get), heard=heard.append,
               engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
-                              second_opinion=lambda audio, hint: "and then",
-                              second_opinion_in={"de": _German()})).run()
+                              verifying_listener=lambda audio, hint: "and then",
+                              verifying_listener_in={"de": _German()})).run()
 
     assert order == ["loaded", "Next."]
     assert [one.recognition.phrase for one in heard] == ["next"]
@@ -638,8 +639,9 @@ def test_a_phrase_said_in_another_language_is_read_in_it_by_the_engine_handed_in
 def test_an_app_hears_through_whisper_in_each_language_of_its_phrases_and_the_speech_detector():
     engines = engines_for(replace(RULES, said_in={"next": "de"}.get), ListenerEvents(heard=print))
 
-    assert (type(engines.second_opinion), set(engines.second_opinion_in), engines.take_down,
-            type(engines.hears_speech)) == (WhisperReader, {"de"}, None, HearsSpeech)
+    assert (type(engines.verifying_listener), set(engines.verifying_listener_in),
+            engines.take_down, type(engines.hears_speech)) == (WhisperReader, {"de"}, None,
+                                                               HearsSpeech)
 
 
 def test_an_app_that_asks_for_speech_is_handed_a_reader_to_take_it_down():
@@ -648,12 +650,24 @@ def test_an_app_that_asks_for_speech_is_handed_a_reader_to_take_it_down():
     assert type(engines.take_down) is WhisperReader
 
 
-def test_an_app_hears_on_its_own_clock_through_the_command_reader_it_started_loading_ahead():
+def test_an_app_hears_on_its_own_clock_through_the_verifying_listener_it_started_loading_ahead():
     def clock():
         return 7.0
 
     loaded_ahead = WhisperReader()
 
-    engines = engines_for(RULES, ListenerEvents(heard=print), clock=clock, second_opinion=loaded_ahead)
+    engines = engines_for(RULES, ListenerEvents(heard=print), clock=clock,
+                          verifying_listener=loaded_ahead)
 
-    assert (engines.clock, engines.second_opinion) == (clock, loaded_ahead)
+    assert (engines.clock, engines.verifying_listener) == (clock, loaded_ahead)
+
+
+def test_an_app_still_saying_second_opinion_hands_over_the_verifying_listener_and_reads_it_back():
+    reader, german = Mock(), Mock()
+
+    engines = Engines(second_opinion=reader, second_opinion_in={"de": german})
+    built = engines_for(RULES, ListenerEvents(heard=print), second_opinion=reader)
+
+    assert (engines.verifying_listener, engines.verifying_listener_in) == (reader, {"de": german})
+    assert (engines.second_opinion, engines.second_opinion_in) == (reader, {"de": german})
+    assert built.verifying_listener is built.second_opinion is reader
