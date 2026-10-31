@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # No siblings cloned: app_support is pinned in pyproject, so pip fetches the
-  # tag this repo was built against.
+  # No siblings cloned: app_support is pinned in pyproject's dev extra, so pip
+  # fetches the tag this repo's suite was built against.
   full-suite:
     uses: haglio/.github/.github/workflows/merge-gate.yml@main
     with:

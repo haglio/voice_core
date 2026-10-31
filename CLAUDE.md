@@ -42,6 +42,9 @@ test, a commit or a reply.
 - A change here reaches an app when that app moves its pin, not before: each
   names a tag of this repo in its `[project.dependencies]`. Landing is two
   commits — this repo's, which tags a version, then the app's, which takes it.
+- This repo pins app_support only in its `dev` extra, for its own suite: an app
+  pins app_support itself, and a pin here, where installing this asks for one,
+  made every app wait for this repo's next release to take a new app_support.
 - The apps' venvs are live: `~/.claude/engineering.md` (User Environment) says
   when and how a new tag may be installed into them.
 
