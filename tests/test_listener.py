@@ -23,6 +23,7 @@ from voice_core.listener import (
     PauseSettings,
     RecognizerUnavailable,
     engines_for,
+    reason_for,
     why_unavailable,
 )
 from voice_core.listening import PHRASE_MARGIN_S
@@ -274,6 +275,11 @@ def test_why_voice_cannot_run_is_the_import_that_failed_or_nothing(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "sounddevice", None)
     assert "sounddevice" in why_unavailable()
+
+
+def test_a_failure_is_told_by_its_message_or_else_by_its_kind():
+    assert reason_for(OSError("no input device")) == "no input device"
+    assert reason_for(TimeoutError()) == "TimeoutError"
 
 
 def _a_miss(tmp_path, **events):

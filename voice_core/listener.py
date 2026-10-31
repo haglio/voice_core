@@ -50,7 +50,7 @@ class MicrophoneUnavailable(Exception):
     pass
 
 
-def _reason(exc: Exception) -> str:
+def reason_for(exc: Exception) -> str:
     return str(exc) or type(exc).__name__
 
 
@@ -61,7 +61,7 @@ def why_unavailable() -> str:
         load_sounddevice()
         importlib.import_module("vosk")
     except Exception as exc:
-        return _reason(exc)
+        return reason_for(exc)
     return ""
 
 
@@ -149,12 +149,12 @@ class CommandListener:
             self._sounddevice = self._sounddevice or load_sounddevice()
             listening = self._build_recognizers()
         except Exception as exc:
-            raise RecognizerUnavailable(_reason(exc)) from exc
+            raise RecognizerUnavailable(reason_for(exc)) from exc
         blocks: queue.Queue[tuple[bytes, float]] = queue.Queue()
         try:
             stream = self._open_microphone(blocks)
         except Exception as exc:
-            raise MicrophoneUnavailable(_reason(exc)) from exc
+            raise MicrophoneUnavailable(reason_for(exc)) from exc
         with stream, self._delivery() as deliver:
             if self._events.listening is not None:
                 self._events.listening()
