@@ -8,10 +8,12 @@ name = "voice-core"
 # it was built against.
 dynamic = ["version"]
 requires-python = ">=3.14"
-# app_support at the tag this repo was built against; every other requirement
-# with a ceiling, its floor what the family's machine holds today.
+# Every requirement with a ceiling, its floor what the family's machine holds
+# today. app_support is not among them: every app pins it itself, and pip refuses
+# two pins of one repo that differ, so a pin here held every app to this repo's
+# copy until this repo released again. Its own suite runs the copy the dev extra
+# names.
 dependencies = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.307",
     "sounddevice>=0.5,<0.6",
     "vosk>=0.3,<0.4",
 ]
@@ -27,6 +29,7 @@ whisper = [
     "numpy>=2.4,<3",
 ]
 dev = [
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.307",
     "numpy>=2.4,<3",
     "pytest>=9,<10",
     "pytest-cov>=7,<8",
