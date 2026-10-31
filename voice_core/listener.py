@@ -12,6 +12,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from app_support import haglio_settings
+
 from voice_core.capture import AudioStall
 from voice_core.commands import CommandRules
 from voice_core.listening import Heard, Listening, Recognizers, outcome_line
@@ -65,8 +67,8 @@ def why_unavailable() -> str:
 
 @dataclass(frozen=True)
 class ListenerSettings:
-    model_name: str
-    device_name: str | None = None
+    model_name: str = field(default_factory=lambda: haglio_settings.value("vosk_model"))
+    device_name: str | None = field(default_factory=lambda: haglio_settings.value("microphone"))
     sample_rate: int = 16000
     caption_misses: bool = False
     pauses: PauseSettings = field(default_factory=PauseSettings)
