@@ -22,6 +22,7 @@ jobs:
       siblings: ""
       python-version: "3.14"
       timeout-minutes: 5
+      keeps-what-others-use: true
 
   # Fun Time's and Origenerator's whole suites, with the candidate installed over their
   # own pins: haglio/.github's apps-import.yml says how, once for every library.
@@ -29,11 +30,12 @@ jobs:
     uses: haglio/.github/.github/workflows/apps-import.yml@main
 
   # A version for each landing, so the apps that run this one can pin the copy
-  # they were built against. The tag is the version: pyproject reads it with
-  # setuptools-scm.
+  # they were built against, and a pull request in each of them taking it. The tag
+  # is the version: pyproject reads it with setuptools-scm.
   tag:
     if: github.event_name == 'push'
     needs: full-suite
     uses: haglio/.github/.github/workflows/tag-the-landing.yml@main
     permissions:
       contents: write
+    secrets: inherit
