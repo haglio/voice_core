@@ -620,3 +620,22 @@ def test_an_app_still_saying_second_opinion_hands_over_the_verifying_listener_an
     assert (engines.verifying_listener, engines.verifying_listener_in) == (reader, {"de": german})
     assert (engines.second_opinion, engines.second_opinion_in) == (reader, {"de": german})
     assert built.verifying_listener is built.second_opinion is reader
+
+
+def test_a_listener_hears_with_the_microphone_and_model_the_familys_settings_name(tmp_path, monkeypatch):
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"microphone": "Desk mic", "vosk_model": "an-example-model"}),
+                        encoding="utf-8")
+    monkeypatch.setenv("HAGLIO_SETTINGS", str(settings))
+
+    assert (ListenerSettings().device_name, ListenerSettings().model_name) == ("Desk mic", "an-example-model")
+
+
+def test_an_app_may_still_name_its_own_microphone_or_none_at_all(tmp_path, monkeypatch):
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"microphone": "Desk mic", "vosk_model": "an-example-model"}),
+                        encoding="utf-8")
+    monkeypatch.setenv("HAGLIO_SETTINGS", str(settings))
+
+    assert ListenerSettings(device_name=None).device_name is None
+    assert ListenerSettings(model_name="another-model").model_name == "another-model"
