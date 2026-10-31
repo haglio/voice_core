@@ -29,7 +29,7 @@ whisper = [
     "numpy>=2.4,<3",
 ]
 dev = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.331",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.333",
     "numpy>=2.4,<3",
     "pytest>=9,<10",
     "pytest-cov>=7,<8",
