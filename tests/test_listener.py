@@ -405,7 +405,7 @@ def test_a_verifying_listener_that_fails_to_load_is_logged_and_the_room_is_still
             return hint
 
     with caplog.at_level(logging.ERROR, logger="voice_core.listener"):
-        _listener(heard=heard.append, engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
+        _listener(heard=heard.append, engines=Engines(_vosk([]), Microphone(A_COMMAND),
                                                       verifying_listener=_Reader())).run()
 
     assert "a reader did not load" in caplog.text
