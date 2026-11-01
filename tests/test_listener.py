@@ -394,6 +394,24 @@ def test_the_verifying_listener_has_finished_loading_before_the_first_utterance_
     assert order == ["loaded", "asked"]
 
 
+def test_a_verifying_listener_that_fails_to_load_is_logged_and_the_room_is_still_heard(caplog):
+    heard = []
+
+    class _Reader:
+        def preload(self):
+            raise OSError("the disk was busy")
+
+        def __call__(self, audio, hint):
+            return hint
+
+    with caplog.at_level(logging.ERROR, logger="voice_core.listener"):
+        _listener(heard=heard.append, engines=Engines(_vosk([]), _sounddevice([], A_COMMAND),
+                                                      verifying_listener=_Reader())).run()
+
+    assert "a reader did not load" in caplog.text
+    assert [one.recognition.phrase for one in heard] == ["next"]
+
+
 def test_the_verifying_listener_starts_loading_before_the_first_listener_loads_its_model():
     order = []
 
@@ -598,17 +616,6 @@ def test_an_app_hears_on_its_own_clock_through_the_verifying_listener_it_started
                           verifying_listener=loaded_ahead)
 
     assert (engines.clock, engines.verifying_listener) == (clock, loaded_ahead)
-
-
-def test_an_app_still_saying_second_opinion_hands_over_the_verifying_listener_and_reads_it_back():
-    reader, german = Mock(), Mock()
-
-    engines = Engines(second_opinion=reader, second_opinion_in={"de": german})
-    built = engines_for(RULES, ListenerEvents(heard=print), second_opinion=reader)
-
-    assert (engines.verifying_listener, engines.verifying_listener_in) == (reader, {"de": german})
-    assert (engines.second_opinion, engines.second_opinion_in) == (reader, {"de": german})
-    assert built.verifying_listener is built.second_opinion is reader
 
 
 def test_a_listener_hears_with_the_microphone_and_model_the_familys_settings_name(tmp_path, monkeypatch):

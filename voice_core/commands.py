@@ -4,7 +4,6 @@ import math
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 
-from voice_core.old_names import answers_to_old_names
 from voice_core.readings import UNKNOWN, Hypothesis, hypotheses
 
 # The noise suppressor on his microphone cuts to digital silence between
@@ -12,7 +11,6 @@ from voice_core.readings import UNKNOWN, Hypothesis, hypotheses
 SILENT_UTTERANCE_PEAK = 300
 
 
-@answers_to_old_names(never_rescued="never_repaired")
 @dataclass(frozen=True)
 class CommandRules:
     phrases: frozenset[str]

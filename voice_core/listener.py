@@ -19,7 +19,6 @@ from voice_core.commands import CommandRules
 from voice_core.listening import Heard, Listening, Recognizers, outcome_line
 from voice_core.microphone import probe_input_device, resolve_input_device
 from voice_core.miss_clips import save_miss_audio
-from voice_core.old_names import answers_to_old_names
 from voice_core.pauses import PauseSegmenter, PauseSettings
 from voice_core.readings import build_grammar
 from voice_core.sound_library import load_sounddevice
@@ -91,8 +90,6 @@ class ListenerEvents:
     wants_words: Callable[[Heard], bool] | None = None
 
 
-@answers_to_old_names(second_opinion="verifying_listener",
-                      second_opinion_in="verifying_listener_in")
 @dataclass(frozen=True)
 class Engines:
     vosk: Any = None
@@ -107,7 +104,6 @@ class Engines:
     hears_speech: Callable[[bytes], bool] | None = None
 
 
-@answers_to_old_names(second_opinion="verifying_listener")
 def engines_for(rules: CommandRules, events: ListenerEvents, *,
                 clock: Callable[[], float] = time.monotonic,
                 verifying_listener: Callable[[bytes, str], str] | None = None) -> Engines:
