@@ -1,0 +1,90 @@
+{
+  "app": "voice_core",
+  "drafted": "2026-11-02",
+  "columns": {
+    "thing": "where it is on the screen and what it looks like",
+    "screen": "the words on the screen that name it (a label, a button, a tooltip), quoted; null when no label names it",
+    "his_word": "the word the user says for it, from his own messages and the spoken commands; null when he has none yet",
+    "code_today": "the words the code says for it now; each has to be in the code, or the row is stale",
+    "code_word": "the one word the code is to say for it; null while unruled",
+    "status": "ruled: his word, given where `ruled` says | his_word: a word he has used, not yet put to him as the code's | agreed: screen, user and code already say one word | unruled: no word of his yet, the row waits for him | kept: a name from outside this app, or a thing he has no word for, so the code keeps its own",
+    "retired": "code words for it that are gone and stay gone; `keep` lists the tokens that may still carry the letters (another thing's name)"
+  },
+  "things": [
+    {
+      "screen": null,
+      "his_word": "voice command; spoken command",
+      "code_word": "voice command",
+      "id": "voice_command",
+      "thing": "what he says to an app, which the app acts on",
+      "code_today": [
+        "voice command",
+        "command"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": null,
+      "his_word": null,
+      "code_word": "first listener",
+      "id": "first_listener",
+      "thing": "the listening that hears every word first and proposes a command",
+      "code_today": [
+        "first listener"
+      ],
+      "status": "ruled",
+      "ruled": "2026-10-16, his words, beside the verifying listener"
+    },
+    {
+      "screen": null,
+      "his_word": "verifying listener (2026-10-16)",
+      "code_word": "verifying listener",
+      "id": "verifying_listener",
+      "thing": "the second listening that must agree with the first before a command acts",
+      "code_today": [
+        "verifying listener"
+      ],
+      "status": "ruled",
+      "ruled": "2026-10-16, his words",
+      "retired": [
+        "second engine",
+        "second listener",
+        "never rescued"
+      ]
+    },
+    {
+      "screen": null,
+      "his_word": null,
+      "code_word": "never repaired",
+      "id": "never_repaired",
+      "thing": "the commands that act only when heard outright, never taken from under another reading",
+      "code_today": [
+        "never repaired"
+      ],
+      "status": "kept"
+    },
+    {
+      "screen": null,
+      "his_word": null,
+      "code_word": "miss clip",
+      "id": "miss_clip",
+      "thing": "the short recording kept of something the app heard and could not place; no screen shows it",
+      "code_today": [
+        "miss clips"
+      ],
+      "status": "kept"
+    },
+    {
+      "screen": null,
+      "his_word": null,
+      "code_word": null,
+      "id": "other_words",
+      "thing": "words the code uses for things no screen shows or names: Python's strip and map",
+      "code_today": [
+        "strip",
+        "map"
+      ],
+      "status": "kept"
+    }
+  ]
+}

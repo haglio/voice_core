@@ -62,6 +62,10 @@ into a test, a commit message or a reply. Use `alpha`/`beta`/`gamma` and plain
 made-up commands. `app_support.sanitize` fails the suite on a **known** blocked
 term only; it cannot see the next one.
 
+## Its words
+
+- **`glossary.json` lists the things this library hears and their words, and `tests/test_glossary.py` holds the code to it.** A noun for a drawn thing is a row there before it is a word in the code; a rename moves the old word from the row's `code_today` to its `retired`.
+
 ## Landing — GitHub merge queue, not local ff-merge
 
 This repo is public at `github.com/haglio/voice_core` with a merge-queue ruleset
