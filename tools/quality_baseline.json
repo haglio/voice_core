@@ -50,5 +50,11 @@
     "tests/test_sound_library.py": 3,
     "tests/test_whisper_reader.py": 1
   },
-  "statements": {}
+  "statements": {},
+  "uncovered_lines": {
+    "voice_core/listener.py": 2,
+    "voice_core/microphone.py": 2,
+    "voice_core/speech.py": 1,
+    "voice_core/whisper_reader.py": 11
+  }
 }
