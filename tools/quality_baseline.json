@@ -21,7 +21,6 @@
   "prose_lines": {
     "tests/test_listener.py": 6,
     "tests/test_listening_thread.py": 1,
-    "tests/test_sibling_pins.py": 1,
     "tests/test_whisper_reader.py": 1,
     "voice_core/capture.py": 1,
     "voice_core/commands.py": 16,
