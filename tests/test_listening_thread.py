@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import threading
 
-from voice_core.listening_thread import ListeningThread
+from voice_core.listener import READING_PATIENCE_S
+from voice_core.listening_thread import STOP_PATIENCE_S, ListeningThread
 
 PATIENCE_S = 10.0
 
 
 class _Listener:
-    """Listens until told to stop, and says when it began and when it was done."""
 
     def __init__(self, *, fails_with=None, never_comes_back=False):
         self.began = threading.Event()
@@ -113,3 +113,7 @@ def test_what_ended_the_listening_is_handed_to_the_app():
     thread.stop()
 
     assert ended_by == [gone]
+
+
+def test_a_closing_window_waits_longer_than_a_closing_listener_waits_for_a_reading():
+    assert STOP_PATIENCE_S > READING_PATIENCE_S

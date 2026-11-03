@@ -28,16 +28,13 @@ from voice_core.whisper_reader import WhisperReader
 
 logger = logging.getLogger(__name__)
 
-# Vosk's grammar restricts the vocabulary, not the phrases: it decodes any
+# vosk's grammar restricts the vocabulary, not the phrases: it decodes any
 # sequence of the phrases' words, so the right phrase often sits in the rankings
 # under a sequence that is no command.
 GRAMMAR_ALTERNATIVES = 5
 
-# Without it, a session where every phrase missed and one where the microphone
-# was dead leave the same log.
 LISTEN_HEARTBEAT_S = 60.0
 
-# How long a closing listener waits for a reading already under way.
 READING_PATIENCE_S = 5.0
 
 
@@ -54,8 +51,6 @@ def reason_for(exc: Exception) -> str:
 
 
 def why_unavailable() -> str:
-    # Absent, present without PortAudio, or broken at import: unavailable either
-    # way, and the message is what the app has to show for it.
     try:
         load_sounddevice()
         importlib.import_module("vosk")
@@ -72,7 +67,6 @@ class ListenerSettings:
     caption_misses: bool = False
     pauses: PauseSettings = field(default_factory=PauseSettings)
     miss_dir: Path | None = None
-    # What the engine that takes speech down is told to expect, beyond ordinary words.
     speech_hint: str = ""
     poll_seconds: float = 0.5
 
@@ -84,7 +78,6 @@ class ListenerEvents:
     stalled: Callable[[float], None] | None = None
     recovered: Callable[[], None] | None = None
     listening: Callable[[], None] | None = None
-    # Whether the room is being listened to: what a muted app mishears is not kept.
     keeps_misses: Callable[[], bool] | None = None
     speech: Callable[[str, Heard], None] | None = None
     wants_words: Callable[[Heard], bool] | None = None
@@ -97,10 +90,7 @@ class Engines:
     clock: Callable[[], float] = time.monotonic
     verifying_listener: Callable[[bytes, str], str] | None = None
     verifying_listener_in: Mapping[str, Callable[[bytes, str], str]] = field(default_factory=dict)
-    # Reads an utterance's audio as ordinary speech, given the app's standing hint.
     take_down: Callable[[bytes, str], str] | None = None
-    # Says of each frame whether somebody is speaking, so an utterance ends when the speaker
-    # pauses even in a room loud enough to hold it open (speech.hears_speech).
     hears_speech: Callable[[bytes], bool] | None = None
 
 
@@ -178,8 +168,6 @@ class CommandListener:
 
     @contextmanager
     def _delivery(self):
-        """How a settled utterance reaches the app: at once, or -- readers taking their
-        time over each -- from one thread of its own, in the order they were spoken."""
         if not self._readers:
             yield self._deliver
             return

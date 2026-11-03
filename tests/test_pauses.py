@@ -158,6 +158,18 @@ def test_the_room_a_session_starts_in_is_no_longer_the_bar_once_it_has_gone_quie
     assert [one is not None for one in ended] == [False] * 4 + [True]
 
 
+def test_a_pause_inside_a_sentence_does_not_pull_the_bar_down_onto_the_speaker():
+    segmenter = PauseSegmenter(PauseSettings(floor=10, ratio=2.0, calibration_frames=1,
+                                             hangover_frames=3, min_speech_frames=2))
+    segmenter.push(ROOM_TONE)
+    for _ in range(3):
+        segmenter.push(SILENCE)
+
+    segmenter.push(A_LITTLE_OVER_THE_ROOM)
+
+    assert not segmenter.speaking
+
+
 def test_it_says_whether_somebody_is_in_the_middle_of_speaking():
     segmenter = _calibrated()
     states = []

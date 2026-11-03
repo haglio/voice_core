@@ -15,29 +15,21 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Prompted with an utterance's own candidates, "base" chose as well as "small" on the owner's
-# recordings (7 of 10 missed commands either way, 3 against 9 invented in 930 utterances of
-# ordinary talk) in a quarter of the time: about a third of a second a reading on this machine.
+# Whisper's "base" chose among an utterance's candidates as well as "small" in a quarter of the time.
 COMMAND_MODEL = "base"
 
-# Taking his sentences down is where "small" earns its second: measured against the engine his
-# dictation apps use, its worst quarter of 24 utterances came within 0.86 of it, base within 0.59.
+# Whisper's "small" takes his sentences down far closer than "base".
 DICTATION_MODEL = "small"
 
-# Prompted in German, "small" read the owner's own "genau" as itself in all three kept clips of him
-# saying it, where "base" wrote "Guten Appetit" (2026-10-07), so a phrase said in another language
-# is read by it.
+# Whisper's "small", prompted in German, reads his "genau" as itself where "base" writes "Guten Appetit".
 OTHER_LANGUAGE_MODEL = "small"
 
 _FULL_LEVEL = 0.95
 _SILENCE = 1e-4
 
-# The longest phrase an app had was 10 tokens, and a reading that runs on past a few tellings of
-# one is whisper repeating itself, so it is stopped there.
 _COMMAND_TOKENS = 48
 
-# Whisper pads whatever it reads to 30 s, so reading a one-second command spent nine tenths of its
-# time on silence: a 3 s window read his Genau clips in 0.15 s against 1.0 s, and read all four.
+# Whisper pads whatever it reads to 30 s, so a one-second command spends its time on silence.
 _FRAMES_A_SECOND = 100
 _SHORTEST_WINDOW = 3 * _FRAMES_A_SECOND
 _LONGEST_WINDOW = 30 * _FRAMES_A_SECOND
@@ -105,9 +97,6 @@ def faster_whisper(module: str = "faster_whisper"):
 
 def load_faster_whisper(model_size: str):
     whisper_model = faster_whisper().WhisperModel
-    # On the CPU by design: the one GPU is for images, videos and Funestras. A reading took
-    # a median 0.43 s on two threads, 0.33 s on four and 0.27 s on eight (this machine,
-    # 2026-09-18): four is most of the gain and leaves the Funestras their cores.
     on_this_machine = partial(whisper_model, model_size, device="cpu", compute_type="int8",
                               cpu_threads=4)
     try:
@@ -117,12 +106,6 @@ def load_faster_whisper(model_size: str):
 
 
 class WhisperReader:
-    """Reads one utterance: ``reader(pcm, hint)``.
-
-    As recorded, for choosing among a command's candidates -- lifting the level or filtering
-    for speech cost that reading a clip or two in ten. *for_dictation*, a quiet microphone is
-    lifted to full level and whisper skips what is not speech, which is what steadied sentences.
-    """
 
     def __init__(self, *, load: Callable[[], Any] | None = None, for_dictation: bool = False,
                  language: str = "en", clock: Callable[[], float] = time.monotonic) -> None:

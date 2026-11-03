@@ -19,20 +19,16 @@ class Heard:
     spoken_at: float
     peak: int
     audio: bytes
-    # Every phrase among the ranked readings, with its rank: what the verifying listener may
-    # choose from.
     candidates: Mapping[str, int]
     phrase_audio: bytes = b""
     words_formed: bool = False
     ended_at: float | None = None
-    # Whether a speech detector heard anybody speak in it; None with no detector to say.
     speaker_heard: bool | None = None
 
 
 @dataclass(frozen=True)
 class Recognizers:
     grammar: Any
-    # Reads the same audio with no phrase list, only to caption what the grammar one missed.
     unrestricted: Any = None
     sample_rate: int = 16000
 

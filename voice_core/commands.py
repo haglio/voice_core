@@ -6,8 +6,8 @@ from dataclasses import dataclass, replace
 
 from voice_core.readings import UNKNOWN, Hypothesis, hypotheses
 
-# The noise suppressor on his microphone cuts to digital silence between
-# utterances, and the recognizer reads words out of it; speech clears this.
+# vosk reads words out of the digital silence his microphone's noise suppressor cuts to
+# between utterances; speech clears this.
 SILENT_UTTERANCE_PEAK = 300
 
 
@@ -17,12 +17,8 @@ class CommandRules:
     never_repaired: Callable[[str], bool]
     confidence_threshold: float = 0.7
     silent_peak: int = SILENT_UTTERANCE_PEAK
-    # With a verifying listener: the phrases taken on the first listener's word alone.
     stands_alone: Callable[[str], bool] | None = None
-    # How the app writes a phrase it had to spell by sound for the grammar ("go now" for
-    # a word the first listener lacks); None for a phrase written as it is said.
     written: Callable[[str], str | None] | None = None
-    # The language a phrase is said in when it is not English ("de" for a German word).
     said_in: Callable[[str], str | None] | None = None
 
     def other_languages(self) -> frozenset[str]:
@@ -32,10 +28,8 @@ class CommandRules:
 @dataclass(frozen=True)
 class Recognition:
     phrase: str | None = None
-    # 0 the recognizer's first choice, higher a repair taken from under it.
     rank: int = 0
     refused_phrase: str | None = None
-    # The first listener's command that the verifying listener, asked, did not read.
     unconfirmed_phrase: str | None = None
     unrecognized_text: str | None = None
     heard: str | None = None
@@ -54,7 +48,6 @@ def interpret(grammar_json: str, free_json: str, *, rules: CommandRules, peak: i
         if hypothesis.text not in rules.phrases:
             continue
         if hypothesis.confidences and not _clears(hypothesis.confidences, rules.confidence_threshold):
-            # A lower-ranked reading is less likely still, so this ends the search.
             return Recognition(refused_phrase=hypothesis.text, heard=spoken, free_text=free_text)
         if rank and (rules.never_repaired(hypothesis.text)
                      or not _shares_a_word(hypothesis.text, spoken)):
@@ -67,15 +60,11 @@ def interpret(grammar_json: str, free_json: str, *, rules: CommandRules, peak: i
     return Recognition()
 
 
-# His microphone's noise suppressor opens with a click the recognizer reads as "the": in one
-# session it led all three commands he spoke ("the enter vr") and was the whole of some forty
-# utterances nobody said.
+# vosk reads the click his microphone's noise suppressor opens with as "the".
 _THE_MICROPHONE_OPENING = "the"
 
 
 def _as_said(readings: Sequence[Hypothesis], rules: CommandRules) -> list[Hypothesis]:
-    """The readings without the microphone's opening at either end, rank for rank: one that
-    was nothing else is kept as an empty place, so a phrase under it is still a repair."""
     return [reading if reading.text in rules.phrases else _without_the_opening(reading)
             for reading in readings]
 
@@ -106,8 +95,6 @@ def _shares_a_word(reading: str, first_choice: str) -> bool:
 
 
 def _clears(confidences: Sequence[float], threshold: float) -> bool:
-    # As a sum against the bar times the count: the quotient rounds three words
-    # spoken exactly at the bar under it.
     return math.fsum(confidences) >= threshold * len(confidences)
 
 

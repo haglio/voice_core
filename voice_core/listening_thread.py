@@ -6,8 +6,6 @@ from typing import Protocol
 
 from voice_core.listener import READING_PATIENCE_S
 
-# A live listener is back within one poll of its microphone plus whatever reading is under
-# way; a wedged one is not something a closing window waits on.
 STOP_PATIENCE_S = READING_PATIENCE_S + 2.0
 
 

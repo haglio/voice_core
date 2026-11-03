@@ -5,26 +5,20 @@ from dataclasses import dataclass
 
 from voice_core.microphone import loudness
 
-# How fast the room's level follows the quiet frames: slowly enough that a pause
-# inside a sentence does not pull the bar down onto the speaker.
 _ROOM_FOLLOWS = 0.02
+_FRAME_MS = 30
+_SAMPLES_A_MS = 16
 
 
 @dataclass(frozen=True)
 class PauseSettings:
-    """Where an utterance begins and ends, in 16-bit sample units.
-
-    The owner's microphone is quiet -- his speech runs 60 to 600 a frame, against digital
-    silence -- so the floor is the one his dictation app settled on over replayed sessions
-    (0.0008 of full scale), not the 0.008 Origenerator had, which sat above most of his words.
-    Half a second of quiet ends an utterance; under 180 ms of sound holds no word."""
 
     floor: float = 26.0
     ratio: float = 2.5
     calibration_frames: int = 15
     hangover_frames: int = 17
     min_speech_frames: int = 6
-    frame_samples: int = 480  # 30 ms at 16 kHz
+    frame_samples: int = _FRAME_MS * _SAMPLES_A_MS
     # Twenty seconds, where vosk's own endpointer gave up on a room that never pauses.
     longest_frames: int = 667
 

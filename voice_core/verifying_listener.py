@@ -41,8 +41,8 @@ def chosen_among(reading: str, candidates: Sequence[str], *,
 
 
 def _is_repeated(heard: str, said: str) -> bool:
-    # Handed a hint, whisper often writes the phrase it heard several times over, and a reading
-    # stopped at its length limit (whisper_reader) can end partway through the last telling.
+    # Whisper, handed a hint, often writes the phrase several times over, and its length limit
+    # can stop the reading partway through the last telling.
     tellings = len(heard) // len(said) if said else 0
     return tellings > 0 and heard == (said * (tellings + 1))[:len(heard)]
 

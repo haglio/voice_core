@@ -194,7 +194,6 @@ def test_lifting_silence_does_not_divide_by_nothing():
 
 
 def _a_process_with_faster_whisper_in_it(monkeypatch, whisper_model=lambda *args, **options: _Model()):
-    # A copy, so whatever the loader leaves in the table of modules goes when the test does.
     monkeypatch.setattr(sys, "modules", dict(sys.modules))
     engine = types.ModuleType("faster_whisper")
     engine.WhisperModel = whisper_model
@@ -226,6 +225,15 @@ def test_a_model_this_machine_has_never_fetched_is_downloaded(monkeypatch):
     load_faster_whisper("base")
 
     assert asked == [True, False]
+
+
+def test_whisper_reads_on_four_processor_threads_leaving_the_graphics_card_alone(monkeypatch):
+    asked = []
+    _a_process_with_faster_whisper_in_it(monkeypatch, lambda *_args, **options: asked.append(options) or _Model())
+
+    load_faster_whisper("base")
+
+    assert (asked[0]["device"], asked[0]["cpu_threads"]) == ("cpu", 4)
 
 
 def test_loading_whisper_refuses_the_torch_it_would_otherwise_import(monkeypatch):

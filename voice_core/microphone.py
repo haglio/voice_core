@@ -74,7 +74,6 @@ PROBE_SECONDS = 0.4
 
 
 def probe_input_device(index, *, sounddevice):
-    # At the device's own rate, so one that cannot do 16 kHz still opens.
     sample_rate = int(sounddevice.query_devices(index)["default_samplerate"])
     wanted_bytes = int(PROBE_SECONDS * sample_rate) * 2
     blocks = queue.Queue()

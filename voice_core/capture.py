@@ -26,7 +26,6 @@ class CaptureLevel:
         return peak
 
 
-# Blocks arrive several times a second, so ten seconds of nothing is the stream gone.
 AUDIO_STALL_S = 10.0
 
 
