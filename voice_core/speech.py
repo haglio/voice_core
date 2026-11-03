@@ -7,8 +7,6 @@ import numpy as np
 
 from voice_core.whisper_reader import faster_whisper
 
-# Silero's own bars: a window scoring 0.5 starts speech, and speech goes on through windows
-# scoring 0.35 or more.
 SPEECH_STARTS_AT = 0.5
 SPEECH_GOES_ON_AT = 0.35
 WINDOW_SAMPLES = 512

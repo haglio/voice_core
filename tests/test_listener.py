@@ -5,6 +5,7 @@ import itertools
 import json
 import logging
 import sys
+import threading
 import wave
 from contextlib import contextmanager
 from dataclasses import replace
@@ -91,7 +92,6 @@ SETTINGS = ListenerSettings(model_name="a-model", device_name="desk", poll_secon
 
 def _listener(*, settings=SETTINGS, rules=RULES, engines, keeps_misses=None, wants_words=None,
               **events):
-    """A listener that stops itself at whichever event fires first."""
     def stopping(wanted=None):
         def event(*args):
             if wanted is not None:
@@ -231,7 +231,6 @@ def test_the_words_still_forming_reach_whoever_asked_for_them():
 
 
 def test_once_a_minute_the_log_says_how_loud_the_microphone_has_been(caplog):
-    # five frames captured, the start, then each frame read
     ticks = iter([0.0] * len(A_COMMAND) + [0.0, 1.0, 1.0, 61.0])
 
     with caplog.at_level(logging.DEBUG, logger="voice_core.listener"):
@@ -289,7 +288,6 @@ def test_a_miss_is_kept_while_the_app_says_it_is_listening(tmp_path):
 
 
 def test_an_app_that_names_nowhere_for_misses_has_none_of_its_audio_written(monkeypatch):
-    # Origenerator promises that what is said to it never reaches the disk.
     kept = Mock()
     monkeypatch.setattr("voice_core.listener.save_miss_audio", kept)
     heard = []
@@ -334,6 +332,21 @@ def test_the_verifying_listener_settles_each_utterance_before_the_app_hears_of_i
     assert asked == [(len(ITS_AUDIO), "next")]
     assert [one.recognition.unconfirmed_phrase for one in heard] == ["next"]
     assert len(list(tmp_path.glob("*.wav"))) == 1
+
+
+def test_a_closing_listener_waits_for_a_reading_already_under_way():
+    heard = []
+
+    def closes_while_it_reads(audio, hint):
+        listener.stop()
+        threading.Event().wait(0.2)
+        return "next"
+
+    listener = _listener(heard=heard.append,
+                         engines=Engines(_vosk([]), Microphone(A_COMMAND), verifying_listener=closes_while_it_reads))
+    listener.run()
+
+    assert [one.recognition.phrase for one in heard] == ["next"]
 
 
 def test_a_verifying_listener_that_fails_leaves_the_first_listeners_word_standing(caplog):
@@ -521,8 +534,6 @@ def test_a_quiet_room_the_recognizer_reads_words_out_of_is_never_taken_down_as_s
 
 
 def test_a_quiet_sentence_is_still_taken_down():
-    # The owner's microphone is quiet: one stretch of his dictation in seven peaks under the bar
-    # that keeps commands from being read out of silence, and half of those hold words.
     frame = array.array("h", [200, -200] * 240).tobytes()
     quiet = bytes(len(frame))
     pauses = PauseSettings(floor=26, ratio=2.0, calibration_frames=1, hangover_frames=2,
@@ -539,7 +550,6 @@ def test_a_quiet_sentence_is_still_taken_down():
 
 
 def test_a_take_down_with_no_words_in_it_is_handed_over_all_the_same():
-    # An app that says it did not catch that has to be told there was something to catch.
     assert _spoken("left net", lambda audio, hint: " . . . ") == [" . . . "]
 
 
