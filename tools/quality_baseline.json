@@ -1,53 +1,8 @@
 {
-  "chain_length": {},
-  "class_attributes": {},
-  "externality_comments": {
-    "voice_core/commands.py": 3,
-    "voice_core/listener.py": 3,
-    "voice_core/pauses.py": 3,
-    "voice_core/readings.py": 1,
-    "voice_core/verifying_listener.py": 2,
-    "voice_core/whisper_reader.py": 8
-  },
-  "fan_out": {},
   "library_patches": {},
-  "methods": {},
-  "mocks": {
-    "tests/test_listener.py": 8,
-    "tests/test_sound_library.py": 2,
-    "tests/test_verifying_listener.py": 1
-  },
-  "monkeypatches": {
-    "tests/test_listener.py": 1,
-    "tests/test_sound_library.py": 3,
-    "tests/test_whisper_reader.py": 2
-  },
   "mutables_imported": {},
-  "patches": {},
   "private_imports": {},
   "private_reaches": {},
   "prose_lines": {},
-  "reach_chains": {
-    "voice_core/listener.py": 35,
-    "voice_core/listening.py": 19,
-    "voice_core/listening_thread.py": 3,
-    "voice_core/pauses.py": 3,
-    "voice_core/speech.py": 1,
-    "voice_core/testing.py": 3,
-    "voice_core/whisper_reader.py": 9
-  },
-  "simple_namespaces": {
-    "tests/test_listener.py": 1,
-    "tests/test_microphone.py": 1,
-    "tests/test_sound_library.py": 3,
-    "tests/test_whisper_reader.py": 1
-  },
-  "statements": {},
-  "trailing_comments": {},
-  "uncovered_lines": {
-    "voice_core/listener.py": 2,
-    "voice_core/microphone.py": 2,
-    "voice_core/speech.py": 1,
-    "voice_core/whisper_reader.py": 11
-  }
+  "trailing_comments": {}
 }
