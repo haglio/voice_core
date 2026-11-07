@@ -374,6 +374,30 @@ def test_a_closing_listener_waits_for_a_reading_already_under_way():
     assert [one.recognition.phrase for one in heard] == ["next"]
 
 
+LOUDER = array.array("h", [3000, -3000] * (FRAME // 2)).tobytes()
+
+
+def test_utterances_a_slow_reader_settles_reach_the_app_in_the_order_they_were_spoken():
+    heard = []
+
+    def slower_over_the_first(audio, hint):
+        threading.Event().wait(0.3 if audio.startswith(VOICED) else 0.0)
+        return "next"
+
+    def two_heard(one):
+        heard.append(one)
+        if len(heard) == 2:
+            listener.stop()
+
+    listener = CommandListener(
+        RULES, SETTINGS, ListenerEvents(heard=two_heard),
+        Engines(_vosk([]), Microphone([*A_COMMAND, LOUDER, LOUDER, QUIET, QUIET]),
+                verifying_listener=slower_over_the_first))
+    listener.run()
+
+    assert [one.audio[:len(VOICED)] for one in heard] == [VOICED, LOUDER]
+
+
 def test_a_verifying_listener_that_fails_leaves_the_first_listeners_word_standing(caplog):
     heard = []
     failing = Mock(side_effect=ModuleNotFoundError("No module named 'faster_whisper'"))
