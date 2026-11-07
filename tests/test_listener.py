@@ -398,6 +398,46 @@ def test_utterances_a_slow_reader_settles_reach_the_app_in_the_order_they_were_s
     assert [one.audio[:len(VOICED)] for one in heard] == [VOICED, LOUDER]
 
 
+def test_the_room_is_still_heard_while_a_slow_reader_takes_its_time_over_an_utterance():
+    reading, heard_meanwhile, waits, heard = threading.Event(), threading.Event(), [], []
+
+    def slow_reader(audio, hint):
+        reading.set()
+        waits.append(heard_meanwhile.wait(2.0))
+        reading.clear()
+        return "next"
+
+    def words_forming(_words):
+        if reading.is_set():
+            heard_meanwhile.set()
+
+    def two_heard(one):
+        heard.append(one)
+        if len(heard) == 2:
+            listener.stop()
+
+    @contextmanager
+    def speaks_again_once_the_reader_reads(**kwargs):
+        def again():
+            if reading.wait(5.0):
+                for frame in (LOUDER, LOUDER, QUIET, QUIET):
+                    kwargs["callback"](frame, FRAME, None, None)
+
+        for frame in A_COMMAND:
+            kwargs["callback"](frame, FRAME, None, None)
+        threading.Thread(target=again, daemon=True).start()
+        yield
+
+    microphone = Microphone([])
+    microphone.RawInputStream = speaks_again_once_the_reader_reads
+    listener = CommandListener(
+        RULES, SETTINGS, ListenerEvents(heard=two_heard, partial=words_forming),
+        Engines(_vosk([]), microphone, verifying_listener=slow_reader))
+    listener.run()
+
+    assert waits[0] is True
+
+
 def test_a_verifying_listener_that_fails_leaves_the_first_listeners_word_standing(caplog):
     heard = []
     failing = Mock(side_effect=ModuleNotFoundError("No module named 'faster_whisper'"))
