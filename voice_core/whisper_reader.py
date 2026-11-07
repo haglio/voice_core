@@ -112,6 +112,9 @@ def load_faster_whisper(model_size: str):
         return _FasterWhisper(on_this_machine(local_files_only=False))
 
 
+# Whisper chose among a command's candidates a clip or two in ten worse with the level lifted or
+# the audio filtered for speech, and took sentences down steadier with both: so commands are read
+# as recorded, and dictation lifted and filtered.
 class WhisperReader:
 
     def __init__(self, *, load: Callable[[], Any] | None = None, for_dictation: bool = False,
