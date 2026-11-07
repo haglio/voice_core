@@ -262,6 +262,28 @@ def test_why_voice_cannot_run_is_the_import_that_failed_or_nothing(monkeypatch):
     assert "sounddevice" in why_unavailable()
 
 
+def _unavailable_as_sounddevice_raises_at_import(monkeypatch, tmp_path, error):
+    (tmp_path / "sounddevice.py").write_text(f"raise {error}", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.delitem(sys.modules, "sounddevice", raising=False)
+    return why_unavailable()
+
+
+def test_a_sound_library_present_without_portaudio_leaves_voice_unavailable_with_its_message(
+        monkeypatch, tmp_path):
+    message = _unavailable_as_sounddevice_raises_at_import(
+        monkeypatch, tmp_path, 'OSError("PortAudio library not found")')
+
+    assert message == "PortAudio library not found"
+
+
+def test_a_sound_library_broken_at_import_leaves_voice_unavailable_with_its_message(
+        monkeypatch, tmp_path):
+    message = _unavailable_as_sounddevice_raises_at_import(monkeypatch, tmp_path, 'RuntimeError("half installed")')
+
+    assert message == "half installed"
+
+
 def test_a_failure_is_told_by_its_message_or_else_by_its_kind():
     assert reason_for(OSError("no input device")) == "no input device"
     assert reason_for(TimeoutError()) == "TimeoutError"
