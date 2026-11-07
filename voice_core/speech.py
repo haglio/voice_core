@@ -7,8 +7,8 @@ import numpy as np
 
 from voice_core.whisper_reader import faster_whisper
 
-SPEECH_STARTS_AT = 0.5
-SPEECH_GOES_ON_AT = 0.35
+_SILERO_S_OWN_BARS = (0.5, 0.35)
+SPEECH_STARTS_AT, SPEECH_GOES_ON_AT = _SILERO_S_OWN_BARS
 WINDOW_SAMPLES = 512
 CONTEXT_SAMPLES = 64
 
