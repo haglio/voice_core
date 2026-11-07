@@ -38,13 +38,14 @@ class Recognition:
 
 
 def interpret(grammar_json: str, free_json: str, *, rules: CommandRules, peak: int) -> Recognition:
-    readings = _as_said(hypotheses(grammar_json), rules)
-    spoken = next((reading.text for reading in readings if reading.text not in ("", UNKNOWN)), None)
+    most_likely_first = _as_said(hypotheses(grammar_json), rules)
+    spoken = next((reading.text for reading in most_likely_first
+                   if reading.text not in ("", UNKNOWN)), None)
     if peak < rules.silent_peak:
         return Recognition(silent_reading=spoken)
     free = next(iter(_as_said(hypotheses(free_json), rules)), None)
     free_text = free.text if free and free.text != UNKNOWN else None
-    for rank, hypothesis in enumerate(readings):
+    for rank, hypothesis in enumerate(most_likely_first):
         if hypothesis.text not in rules.phrases:
             continue
         if hypothesis.confidences and not _clears(hypothesis.confidences, rules.confidence_threshold):
