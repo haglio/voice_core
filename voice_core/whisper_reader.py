@@ -32,7 +32,8 @@ _SILENCE = 1e-4
 _LONGEST_PHRASE_AN_APP_HAD_TOKENS = 10
 _COMMAND_TOKENS = 48
 
-# Whisper pads whatever it reads to 30 s, so a one-second command spends its time on silence.
+# Whisper pads whatever it reads to 30 s, so a one-second command spends its time on silence: a
+# 3 s window read all four of his Genau clips, in 0.15 s against 1.0 s.
 _FRAMES_A_SECOND = 100
 _SHORTEST_WINDOW = 3 * _FRAMES_A_SECOND
 _LONGEST_WINDOW = 30 * _FRAMES_A_SECOND
