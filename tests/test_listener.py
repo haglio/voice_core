@@ -598,7 +598,7 @@ def test_a_quiet_sentence_is_still_taken_down_though_it_peaks_under_the_bar_keep
     assert spoken == ["a little longer"]
 
 
-def test_a_take_down_with_no_words_in_it_is_handed_over_all_the_same():
+def test_a_take_down_with_no_words_in_it_is_handed_over_so_the_app_can_say_it_did_not_catch_that():
     assert _spoken("left net", lambda audio, hint: " . . . ") == [" . . . "]
 
 
