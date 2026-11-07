@@ -230,8 +230,11 @@ def test_the_words_still_forming_reach_whoever_asked_for_them():
     assert forming == ["ne"]
 
 
-def test_once_a_minute_the_log_says_how_loud_the_microphone_has_been(caplog):
-    ticks = iter([0.0] * len(A_COMMAND) + [0.0, 1.0, 1.0, 61.0])
+def test_once_a_minute_the_log_says_how_loud_the_microphone_has_been_so_a_dead_one_is_told_from_misses(caplog):
+    one_a_frame_captured = [0.0] * len(A_COMMAND)
+    the_start = [0.0]
+    one_a_frame_read = [1.0, 1.0, 61.0]
+    ticks = iter([*one_a_frame_captured, *the_start, *one_a_frame_read])
 
     with caplog.at_level(logging.DEBUG, logger="voice_core.listener"):
         _listener(engines=Engines(_vosk([]), Microphone(A_COMMAND),
