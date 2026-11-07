@@ -15,7 +15,9 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Whisper's "base" chose among an utterance's candidates as well as "small" in a quarter of the time.
+# Whisper's "base", choosing among an utterance's candidates on his recordings, matched "small"
+# (7 of 10 missed commands either way), invented a third as many out of ordinary talk (3 against
+# 9 in 930 utterances) and took a quarter of the time.
 COMMAND_MODEL = "base"
 
 # Whisper's "small" takes his sentences down far closer than "base".
