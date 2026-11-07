@@ -89,7 +89,7 @@ def test_a_phrase_refused_under_the_bar_ends_the_search_among_readings_less_like
     assert heard == Recognition(refused_phrase="left next", heard="left next")
 
 
-def test_three_words_scored_exactly_at_the_bar_clear_it():
+def test_three_words_scored_exactly_at_the_bar_clear_it_though_their_mean_rounds_under_it():
     heard = interpret(_scored("main video mode", 0.7), "", rules=RULES, peak=SPOKEN)
 
     assert heard == Recognition(phrase="main video mode", heard="main video mode")
