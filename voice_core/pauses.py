@@ -8,16 +8,20 @@ from voice_core.microphone import loudness
 _ROOM_FOLLOWS = 0.02
 _FRAME_MS = 30
 _SAMPLES_A_MS = 16
+_FULL_SCALE = 32767
+_FLOOR_OF_FULL_SCALE = 0.0008
+_HALF_A_SECOND_OF_QUIET_FRAMES = round(500 / _FRAME_MS)
+_SHORTEST_WORD_FRAMES = 180 // _FRAME_MS
 
 
 @dataclass(frozen=True)
 class PauseSettings:
 
-    floor: float = 26.0
+    floor: float = round(_FLOOR_OF_FULL_SCALE * _FULL_SCALE)
     ratio: float = 2.5
     calibration_frames: int = 15
-    hangover_frames: int = 17
-    min_speech_frames: int = 6
+    hangover_frames: int = _HALF_A_SECOND_OF_QUIET_FRAMES
+    min_speech_frames: int = _SHORTEST_WORD_FRAMES
     frame_samples: int = _FRAME_MS * _SAMPLES_A_MS
     # Twenty seconds, where vosk's own endpointer gave up on a room that never pauses.
     longest_frames: int = 667
