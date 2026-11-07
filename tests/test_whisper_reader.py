@@ -9,7 +9,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from voice_core.whisper_reader import Reading, WhisperReader, load_faster_whisper
+from voice_core.whisper_reader import (
+    _COMMAND_TOKENS,
+    _LONGEST_PHRASE_AN_APP_HAD_TOKENS,
+    Reading,
+    WhisperReader,
+    load_faster_whisper,
+)
 
 QUIET_PCM = array.array("h", [0, 16384, -16384, 0]).tobytes()
 A_SECOND = 16000
@@ -174,6 +180,10 @@ def test_a_command_reading_stops_after_a_few_tellings_of_the_longest_phrase():
     reader.read_closely(QUIET_PCM, "next")
 
     assert [options["max_new_tokens"] for _samples, options in model.windows] == [48, 48]
+
+
+def test_a_command_reading_has_room_for_a_few_tellings_of_the_longest_phrase_an_app_had_no_more():
+    assert _COMMAND_TOKENS // _LONGEST_PHRASE_AN_APP_HAD_TOKENS == 4
 
 
 def test_dictation_is_taken_down_as_whisper_would_take_it_down_anyway():

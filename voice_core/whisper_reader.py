@@ -29,6 +29,7 @@ OTHER_LANGUAGE_MODEL = "small"
 _FULL_LEVEL = 0.95
 _SILENCE = 1e-4
 
+_LONGEST_PHRASE_AN_APP_HAD_TOKENS = 10
 _COMMAND_TOKENS = 48
 
 # Whisper pads whatever it reads to 30 s, so a one-second command spends its time on silence.
