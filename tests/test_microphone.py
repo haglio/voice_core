@@ -169,33 +169,21 @@ def test_no_samples_at_all_are_silence():
 
 
 @contextmanager
-def _a_stream_that_delivers_one_second(opened, **kwargs):
+def _a_stream_that_refuses_16_khz_and_delivers_one_second(opened, **kwargs):
+    if kwargs["samplerate"] == 16000:
+        raise ValueError("Invalid sample rate")
     opened.append(kwargs)
     one_second = array.array("h", [100, -100] * (kwargs["samplerate"] // 2)).tobytes()
     kwargs["callback"](one_second, len(one_second) // 2, None, None)
     yield
 
 
-def test_a_probe_listens_at_the_devices_own_rate_and_reports_how_loud_it_was():
+def test_a_device_that_refuses_16_khz_is_probed_at_its_own_rate_for_how_loud_it_is():
     opened = []
     backend = _FakeSoundDevice([{**_device("Desk mic"), "default_samplerate": 48000.0}], 0)
-    backend.RawInputStream = partial(_a_stream_that_delivers_one_second, opened)
+    backend.RawInputStream = partial(_a_stream_that_refuses_16_khz_and_delivers_one_second, opened)
 
     level = probe_input_device(0, sounddevice=backend)
 
     assert level == pytest.approx(100.0)
     assert (opened[0]["device"], opened[0]["samplerate"], opened[0]["dtype"]) == (0, 48000, "int16")
-
-
-def test_a_microphone_that_cannot_record_at_16_khz_is_still_probed_at_its_own_rate():
-    opened = []
-
-    def refuses_16_khz(**kwargs):
-        if kwargs["samplerate"] == 16000:
-            raise ValueError("Invalid sample rate")
-        return _a_stream_that_delivers_one_second(opened, **kwargs)
-
-    backend = _FakeSoundDevice([{**_device("Desk mic"), "default_samplerate": 48000.0}], 0)
-    backend.RawInputStream = refuses_16_khz
-
-    assert probe_input_device(0, sounddevice=backend) == pytest.approx(100.0)
