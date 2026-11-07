@@ -3,6 +3,8 @@ from __future__ import annotations
 import array
 
 from voice_core.capture import AUDIO_STALL_S, AudioStall, CaptureLevel
+from voice_core.listener import ListenerSettings
+from voice_core.pauses import PauseSettings
 
 
 def _pcm(*samples):
@@ -52,6 +54,12 @@ def test_a_steady_stream_is_never_a_stall():
 
     assert stall.note_silence(now=AUDIO_STALL_S - 1) is None
     assert stall.note_block(now=AUDIO_STALL_S - 0.5) is False
+
+
+def test_a_stall_is_hundreds_of_missing_blocks_never_a_slow_one():
+    a_block_s = PauseSettings().frame_samples / ListenerSettings.sample_rate
+
+    assert AUDIO_STALL_S / a_block_s >= 100
 
 
 def test_a_stall_is_reported_once_with_how_long_nothing_has_arrived():
