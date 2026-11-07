@@ -582,7 +582,7 @@ def test_a_quiet_room_the_recognizer_reads_words_out_of_is_never_taken_down_as_s
     take_down.assert_not_called()
 
 
-def test_a_quiet_sentence_is_still_taken_down():
+def test_a_quiet_sentence_is_still_taken_down_though_it_peaks_under_the_bar_keeping_commands_out_of_silence():
     frame = array.array("h", [200, -200] * 240).tobytes()
     quiet = bytes(len(frame))
     pauses = PauseSettings(floor=26, ratio=2.0, calibration_frames=1, hangover_frames=2,
