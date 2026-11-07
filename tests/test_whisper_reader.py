@@ -203,8 +203,12 @@ def test_lifting_silence_does_not_divide_by_nothing():
     assert model.asked[0][0] == [0.0, 0.0, 0.0, 0.0]
 
 
-def _a_process_with_faster_whisper_in_it(monkeypatch, whisper_model=lambda *args, **options: _Model()):
+def _a_module_table_that_goes_with_the_test(monkeypatch):
     monkeypatch.setattr(sys, "modules", dict(sys.modules))
+
+
+def _a_process_with_faster_whisper_in_it(monkeypatch, whisper_model=lambda *args, **options: _Model()):
+    _a_module_table_that_goes_with_the_test(monkeypatch)
     engine = types.ModuleType("faster_whisper")
     engine.WhisperModel = whisper_model
     sys.modules["faster_whisper"] = engine
