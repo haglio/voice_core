@@ -185,3 +185,17 @@ def test_a_probe_listens_at_the_devices_own_rate_and_reports_how_loud_it_was():
 
     assert level == pytest.approx(100.0)
     assert (opened[0]["device"], opened[0]["samplerate"], opened[0]["dtype"]) == (0, 48000, "int16")
+
+
+def test_a_microphone_that_cannot_record_at_16_khz_is_still_probed_at_its_own_rate():
+    opened = []
+
+    def refuses_16_khz(**kwargs):
+        if kwargs["samplerate"] == 16000:
+            raise ValueError("Invalid sample rate")
+        return _a_stream_that_delivers_one_second(opened, **kwargs)
+
+    backend = _FakeSoundDevice([{**_device("Desk mic"), "default_samplerate": 48000.0}], 0)
+    backend.RawInputStream = refuses_16_khz
+
+    assert probe_input_device(0, sounddevice=backend) == pytest.approx(100.0)
