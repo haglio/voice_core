@@ -6,7 +6,8 @@ from typing import Protocol
 
 from voice_core.listener import READING_PATIENCE_S
 
-STOP_PATIENCE_S = READING_PATIENCE_S + 2.0
+_ROOM_FOR_A_MICROPHONE_POLL_S = 2.0
+STOP_PATIENCE_S = READING_PATIENCE_S + _ROOM_FOR_A_MICROPHONE_POLL_S
 
 
 class _Listens(Protocol):
