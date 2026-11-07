@@ -80,6 +80,15 @@ def test_a_scored_phrase_under_the_bar_is_refused_by_name():
     assert heard == Recognition(refused_phrase="skip", heard="skip")
 
 
+def test_a_phrase_refused_under_the_bar_ends_the_search_among_readings_less_likely_still():
+    readings = json.dumps({"alternatives": [json.loads(_scored("left next", 0.3)),
+                                            json.loads(_scored("left lock", 0.9))]})
+
+    heard = interpret(readings, "", rules=RULES, peak=SPOKEN)
+
+    assert heard == Recognition(refused_phrase="left next", heard="left next")
+
+
 def test_three_words_scored_exactly_at_the_bar_clear_it():
     heard = interpret(_scored("main video mode", 0.7), "", rules=RULES, peak=SPOKEN)
 
