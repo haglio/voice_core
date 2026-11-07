@@ -178,3 +178,17 @@ def test_it_says_whether_somebody_is_in_the_middle_of_speaking():
         states.append(segmenter.speaking)
 
     assert states == [False, True, True, True, True, False]
+
+
+QUIETEST_SPEECH_OF_A_QUIET_MICROPHONE = array.array("h", [60, -60] * 240).tobytes()
+
+
+def test_the_quietest_speech_of_a_quiet_microphone_clears_the_floor_over_digital_silence():
+    settings = PauseSettings()
+    segmenter = PauseSegmenter(settings)
+    for _ in range(settings.calibration_frames):
+        segmenter.push(bytes(settings.frame_samples * 2))
+
+    segmenter.push(QUIETEST_SPEECH_OF_A_QUIET_MICROPHONE)
+
+    assert segmenter.speaking
