@@ -30,8 +30,9 @@ in; one taking speech down for an app that asks for speech; and a speech detecto
 an utterance when its speaker pauses, however loud the room stays.
 
 `ListeningThread` runs a listener on a thread of its own and can be stopped and started
-again, each start with a fresh listener; `stop()` waits for the microphone to close, though
-never on a listener that has wedged. `on_failure` receives what ended the listening: a
+again, each start with a fresh listener; `stop()` returns at once and leaves the microphone to
+close behind it, and `close()` waits for every microphone it opened to close, though never on a
+listener that has wedged. `on_failure` receives what ended the listening: a
 `RecognizerUnavailable`, a `MicrophoneUnavailable`, or whatever else was raised.
 
 `on_heard` receives a `Heard`: the `Recognition` (the phrase that was said, or which
