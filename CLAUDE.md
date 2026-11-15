@@ -42,8 +42,11 @@ test, a commit or a reply.
 - A change here reaches an app when that app moves its pin, not before: each
   names a tag of this repo in its `[project.dependencies]`. Landing is two
   commits — this repo's, which tags a version, then the app's, which takes it
-  and which this repo's landing opens in every app as a pull request that ships
-  by itself once the app's checks pass (`app_support.newest_pins`).
+  and which an hourly offer opens in every app as a pull request that ships
+  by itself once the app's checks pass (`app_support.newest_pins`). A landing
+  tags a version only when it changes code an app installs
+  (`app_support.releases`), and an `Urgent: <what broke>` trailer on one of
+  its commits has the apps offered it at once.
 - This repo pins app_support only in its `dev` extra, for its own suite: an app
   pins app_support itself, and a pin here, where installing this asks for one,
   made every app wait for this repo's next release to take a new app_support.
