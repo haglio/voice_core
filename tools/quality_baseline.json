@@ -4,5 +4,11 @@
   "private_imports": {},
   "private_reaches": {},
   "prose_lines": {},
-  "trailing_comments": {}
+  "trailing_comments": {},
+  "wall_clock_waits": {
+    "tests/test_listener.py": 3,
+    "tests/test_listening_thread.py": 9,
+    "tests/test_sound_library.py": 2,
+    "tests/test_whisper_reader.py": 4
+  }
 }
