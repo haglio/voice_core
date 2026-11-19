@@ -28,6 +28,7 @@ from voice_core.listener import (
     why_unavailable,
 )
 from voice_core.listening import PHRASE_MARGIN_S
+from voice_core.loaded_models import LoadedModels
 from voice_core.speech import HearsSpeech
 from voice_core.testing import Microphone, vosk
 from voice_core.whisper_reader import WhisperReader
@@ -734,3 +735,28 @@ def test_an_app_may_still_name_its_own_microphone_or_none_at_all(tmp_path, monke
 
     assert ListenerSettings(device_name=None).device_name is None
     assert ListenerSettings(model_name="another-model").model_name == "another-model"
+
+
+def test_a_listener_started_again_hears_with_the_model_the_first_one_loaded():
+    loaded = []
+    models = LoadedModels()
+    counting = vosk(lambda *args: _Recognizer(*args))
+    counting.Model = lambda model_name: loaded.append(model_name) or model_name
+
+    for _ in range(2):
+        _listener(engines=Engines(counting, Microphone(A_COMMAND), models=models)).run()
+
+    assert loaded == ["a-model"]
+
+
+def test_the_readers_of_one_model_size_in_an_app_share_one_loaded_copy(monkeypatch):
+    sizes = []
+    monkeypatch.setattr("voice_core.whisper_reader.load_faster_whisper",
+                        lambda size: sizes.append(size) or object())
+    engines = engines_for(replace(RULES, said_in={"next": "de"}.get),
+                          ListenerEvents(heard=print, speech=print), models=LoadedModels())
+
+    for reader in (engines.verifying_listener, engines.take_down, *engines.verifying_listener_in.values()):
+        reader.preload()
+
+    assert sorted(sizes) == ["base", "small"]

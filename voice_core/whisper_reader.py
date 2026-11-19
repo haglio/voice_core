@@ -13,6 +13,8 @@ from typing import Any
 
 import numpy as np
 
+from voice_core.loaded_models import LoadedModels
+
 logger = logging.getLogger(__name__)
 
 # Whisper's "base", choosing among an utterance's candidates on his recordings, matched "small"
@@ -118,10 +120,13 @@ def load_faster_whisper(model_size: str):
 class WhisperReader:
 
     def __init__(self, *, load: Callable[[], Any] | None = None, for_dictation: bool = False,
-                 language: str = "en", clock: Callable[[], float] = time.monotonic) -> None:
+                 language: str = "en", clock: Callable[[], float] = time.monotonic,
+                 models: LoadedModels | None = None) -> None:
         size = (DICTATION_MODEL if for_dictation
                 else COMMAND_MODEL if language == "en" else OTHER_LANGUAGE_MODEL)
-        self._load = load or partial(load_faster_whisper, size)
+        load_its_size = partial(load_faster_whisper, size)
+        self._load = load or (load_its_size if models is None
+                              else partial(models.take, ("whisper", size), load_its_size))
         self._for_dictation = for_dictation
         self._language = language
         self._clock = clock

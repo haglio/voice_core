@@ -17,6 +17,7 @@ from app_support import haglio_settings
 from voice_core.capture import AudioStall
 from voice_core.commands import CommandRules
 from voice_core.listening import Heard, Listening, Recognizers, outcome_line
+from voice_core.loaded_models import IN_THIS_PROCESS, LoadedModels
 from voice_core.microphone import probe_input_device, resolve_input_device
 from voice_core.miss_clips import save_miss_audio
 from voice_core.pauses import PauseSegmenter, PauseSettings
@@ -92,17 +93,21 @@ class Engines:
     verifying_listener_in: Mapping[str, Callable[[bytes, str], str]] = field(default_factory=dict)
     take_down: Callable[[bytes, str], str] | None = None
     hears_speech: Callable[[bytes], bool] | None = None
+    models: LoadedModels | None = None
 
 
 def engines_for(rules: CommandRules, events: ListenerEvents, *,
                 clock: Callable[[], float] = time.monotonic,
-                verifying_listener: Callable[[bytes, str], str] | None = None) -> Engines:
+                verifying_listener: Callable[[bytes, str], str] | None = None,
+                models: LoadedModels = IN_THIS_PROCESS) -> Engines:
     return Engines(clock=clock,
-                   verifying_listener=verifying_listener or WhisperReader(),
-                   verifying_listener_in={language: WhisperReader(language=language)
+                   verifying_listener=verifying_listener or WhisperReader(models=models),
+                   verifying_listener_in={language: WhisperReader(language=language, models=models)
                                           for language in rules.other_languages()},
-                   take_down=WhisperReader(for_dictation=True) if events.speech else None,
-                   hears_speech=hears_speech())
+                   take_down=(WhisperReader(for_dictation=True, models=models)
+                              if events.speech else None),
+                   hears_speech=hears_speech(),
+                   models=models)
 
 
 class CommandListener:
@@ -119,6 +124,7 @@ class CommandListener:
         self._verifying_listener_in = dict(engines.verifying_listener_in)
         self._take_down = engines.take_down
         self._hears_speech = engines.hears_speech
+        self._models = engines.models
         self._readers = tuple(
             reader for reader in (engines.verifying_listener, engines.take_down,
                                   *engines.verifying_listener_in.values())
@@ -257,7 +263,7 @@ class CommandListener:
             self._events.stalled(idle)
 
     def _build_recognizers(self) -> Listening:
-        model = self._vosk.Model(model_name=self._settings.model_name)
+        model = self._vosk_model()
         sample_rate = self._settings.sample_rate
         recognizer = self._vosk.KaldiRecognizer(
             model, sample_rate, build_grammar(self._rules.phrases))
@@ -272,6 +278,12 @@ class CommandListener:
                          on_partial=self._events.partial,
                          for_dictation=self._takes_dictation()
                          and self._events.wants_words is None)
+
+    def _vosk_model(self):
+        load = partial(self._vosk.Model, model_name=self._settings.model_name)
+        if self._models is None:
+            return load()
+        return self._models.take(("vosk", self._settings.model_name), load)
 
     def _open_microphone(self, blocks: queue.Queue[tuple[bytes, float]]):
         return self._sounddevice.RawInputStream(
