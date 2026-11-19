@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import array
+import numpy as np
 
 
 class CaptureLevel:
@@ -9,11 +9,10 @@ class CaptureLevel:
         self._recent = 0
 
     def note_block(self, pcm: bytes) -> None:
-        block = array.array("h")
-        block.frombytes(pcm[: len(pcm) // 2 * 2])
-        if not block:
+        block = np.frombuffer(pcm, dtype=np.int16, count=len(pcm) // 2)
+        if not block.size:
             return
-        peak = max(*block, -min(block))
+        peak = int(np.abs(block.astype(np.int32)).max())
         self._utterance = max(self._utterance, peak)
         self._recent = max(self._recent, peak)
 

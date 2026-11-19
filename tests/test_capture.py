@@ -23,6 +23,13 @@ def test_the_level_of_an_utterance_is_its_loudest_sample_either_side_of_zero():
     assert level.take_utterance() == LOUD
 
 
+def test_the_most_negative_sample_there_is_reads_as_the_loudest_level_there_is():
+    level = CaptureLevel()
+    level.note_block(_pcm(-32768, 32767))
+
+    assert level.take_utterance() == 32768
+
+
 def test_taking_an_utterances_level_starts_the_next_one_from_nothing():
     level = CaptureLevel()
     level.note_block(_pcm(LOUD))
