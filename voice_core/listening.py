@@ -51,13 +51,17 @@ class Listening:
         self._fed_seconds = 0.0
         self._began_on_the_stream = 0.0
         self._settled_partway: list[str] = []
+        self._heard_muted = False
 
-    def feed(self, data: bytes, *, started_at: float) -> Heard | None:
+    def feed(self, data: bytes, *, started_at: float, muted: bool = False) -> Heard | None:
         spoke_before = self._segmenter.speaking
         utterance = self._segmenter.push(data)
         if self._segmenter.speaking and not spoke_before:
             self._begin_utterance(at=started_at)
         self._level.note_block(data)
+        self._heard_muted = self._heard_muted or muted
+        if self._heard_muted:
+            return self._muted_through(utterance)
         if self._recognizer.AcceptWaveform(data):
             self._settled_partway.append(self._recognizer.Result())
         self._fed_seconds += len(data) / self._bytes_per_second
@@ -70,6 +74,12 @@ class Listening:
             forming = partial_text(self._recognizer.PartialResult())
             if forming:
                 self._note_partial(forming)
+        return None
+
+    def _muted_through(self, utterance: bytes | None) -> None:
+        if utterance is not None or not self._segmenter.speaking:
+            self._heard_muted = False
+            self._note_partial("")
         return None
 
     def take_recent_level(self) -> int:

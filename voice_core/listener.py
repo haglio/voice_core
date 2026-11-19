@@ -82,6 +82,7 @@ class ListenerEvents:
     keeps_misses: Callable[[], bool] | None = None
     speech: Callable[[str, Heard], None] | None = None
     wants_words: Callable[[Heard], bool] | None = None
+    muted: Callable[[], bool] | None = None
 
 
 @dataclass(frozen=True)
@@ -170,7 +171,7 @@ class CommandListener:
                     last_heartbeat = now
                     logger.debug("Voice: listening; loudest sample since the last report: %d",
                                  listening.take_recent_level())
-                heard = listening.feed(data, started_at=started_at)
+                heard = listening.feed(data, started_at=started_at, muted=self._is_muted())
                 if heard is not None:
                     deliver(heard)
 
@@ -235,6 +236,9 @@ class CommandListener:
         self._keep_a_miss(heard)
         self._events.heard(heard)
         self._hand_over_speech(heard)
+
+    def _is_muted(self) -> bool:
+        return self._events.muted is not None and self._events.muted()
 
     def _takes_dictation(self) -> bool:
         return self._events.speech is not None and self._take_down is not None
