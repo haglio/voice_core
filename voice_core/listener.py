@@ -147,7 +147,7 @@ class CommandListener:
             stream = self._open_microphone(blocks)
         except Exception as exc:
             raise MicrophoneUnavailable(reason_for(exc)) from exc
-        with stream, self._delivery() as deliver:
+        with stream, self._delivery(listening) as deliver:
             if self._events.listening is not None:
                 self._events.listening()
             began = self._clock()
@@ -173,16 +173,16 @@ class CommandListener:
                     deliver(heard)
 
     @contextmanager
-    def _delivery(self):
+    def _delivery(self, listening: Listening):
         if not self._readers:
-            yield self._deliver
+            yield lambda heard: self._deliver(listening.captioned(heard))
             return
         waiting: queue.Queue[Heard | None] = queue.Queue()
 
         def in_order() -> None:
             self._finish_loading_the_readers()
             while (heard := waiting.get()) is not None:
-                self._deliver(self._settled(heard))
+                self._deliver(self._settled(listening.captioned(heard)))
 
         worker = threading.Thread(target=in_order, name="voice-readers", daemon=True)
         worker.start()

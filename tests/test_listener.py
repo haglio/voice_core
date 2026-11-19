@@ -760,3 +760,22 @@ def test_the_readers_of_one_model_size_in_an_app_share_one_loaded_copy(monkeypat
         reader.preload()
 
     assert sorted(sizes) == ["base", "small"]
+
+
+def test_a_miss_is_captioned_by_the_readers_so_the_microphone_is_never_left_waiting_on_it():
+    captioned_on = []
+
+    class _Captioning(_Recognizer):
+        def AcceptWaveform(self, data):  # noqa: N802
+            if self.grammar is None:
+                captioned_on.append(threading.current_thread().name)
+            return super().AcceptWaveform(data)
+
+    def recognizer(*args):
+        return _Captioning(*args, reading="left net")
+
+    _listener(settings=replace(SETTINGS, caption_misses=True),
+              engines=Engines(vosk(recognizer), Microphone(A_COMMAND),
+                              verifying_listener=lambda audio, hint: "")).run()
+
+    assert captioned_on == ["voice-readers"]

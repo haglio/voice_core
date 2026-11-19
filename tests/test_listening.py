@@ -217,8 +217,28 @@ def test_a_miss_carries_what_an_unrestricted_recognizer_made_of_the_same_utteran
 
     [heard] = _feed(listening, A_COMMAND)
 
-    assert heard.recognition == Recognition(
+    assert listening.captioned(heard).recognition == Recognition(
         unrecognized_text="left net", heard="left net", free_text="what is next")
+
+
+def test_a_miss_is_left_uncaptioned_while_the_microphone_is_still_being_read():
+    unrestricted = _Recognizer(_scored("what is next", 0.4))
+
+    [heard] = _feed(_listening(_Recognizer(_ranked("left net")), unrestricted), A_COMMAND)
+
+    assert (heard.recognition.free_text, unrestricted.heard) == (None, [])
+
+
+def test_an_utterance_too_quiet_to_count_is_never_captioned():
+    unrestricted = _Recognizer(_scored("what is next", 0.4))
+    listening = Listening(replace(RULES, silent_peak=SHOUT), Recognizers(_Recognizer(_ranked("left net")),
+                                                                         unrestricted),
+                          PauseSegmenter(PAUSES))
+
+    [heard] = _feed(listening, A_COMMAND)
+
+    assert (listening.captioned(heard).recognition, unrestricted.heard) == (
+        Recognition(silent_reading="left net"), [])
 
 
 def test_what_the_unrestricted_recognizer_settled_by_itself_is_in_the_caption_too():
@@ -227,22 +247,25 @@ def test_what_the_unrestricted_recognizer_settled_by_itself_is_in_the_caption_to
 
     [heard] = _feed(listening, A_COMMAND)
 
-    assert heard.recognition.free_text == "what is next"
+    assert listening.captioned(heard).recognition.free_text == "what is next"
 
 
 def test_a_command_is_never_held_up_by_the_unrestricted_recognizer():
     unrestricted = _Recognizer(_scored("next", 0.9))
 
-    [heard] = _feed(_listening(_Recognizer(_ranked("next")), unrestricted), A_COMMAND)
+    listening = _listening(_Recognizer(_ranked("next")), unrestricted)
+    [heard] = _feed(listening, A_COMMAND)
 
-    assert heard.recognition.phrase == "next"
+    assert listening.captioned(heard).recognition.phrase == "next"
     assert unrestricted.heard == []
 
 
 def test_a_miss_is_captioned_from_its_own_audio_read_in_one_go():
     unrestricted = _Recognizer(_scored("what", 0.4))
 
-    _feed(_listening(_Recognizer(_ranked("left net")), unrestricted), [QUIET] * 6 + A_COMMAND[1:])
+    listening = _listening(_Recognizer(_ranked("left net")), unrestricted)
+    [heard] = _feed(listening, [QUIET] * 6 + A_COMMAND[1:])
+    listening.captioned(heard)
 
     assert unrestricted.heard == [VOICED + VOICED + QUIET + QUIET]
 
