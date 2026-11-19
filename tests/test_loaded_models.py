@@ -27,7 +27,7 @@ def test_a_model_that_failed_to_load_is_tried_again_by_the_next_to_ask():
     def refuses():
         raise OSError("not on this machine")
 
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="not on this machine"):
         models.take("small", refuses)
 
     assert models.take("small", lambda: "the small model") == "the small model"

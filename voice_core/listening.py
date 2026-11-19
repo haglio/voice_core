@@ -61,7 +61,8 @@ class Listening:
         self._level.note_block(data)
         self._heard_muted = self._heard_muted or muted
         if self._heard_muted:
-            return self._muted_through(utterance)
+            self._muted_through(utterance)
+            return None
         if self._recognizer.AcceptWaveform(data):
             self._settled_partway.append(self._recognizer.Result())
         self._fed_seconds += len(data) / self._bytes_per_second
@@ -80,7 +81,6 @@ class Listening:
         if utterance is not None or not self._segmenter.speaking:
             self._heard_muted = False
             self._note_partial("")
-        return None
 
     def take_recent_level(self) -> int:
         return self._level.take_recent()

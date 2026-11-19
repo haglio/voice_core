@@ -740,7 +740,7 @@ def test_an_app_may_still_name_its_own_microphone_or_none_at_all(tmp_path, monke
 def test_a_listener_started_again_hears_with_the_model_the_first_one_loaded():
     loaded = []
     models = LoadedModels()
-    counting = vosk(lambda *args: _Recognizer(*args))
+    counting = vosk(_Recognizer)
     counting.Model = lambda model_name: loaded.append(model_name) or model_name
 
     for _ in range(2):
