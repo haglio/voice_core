@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import array
 import logging
 import math
 import queue
 from dataclasses import dataclass
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +64,10 @@ def resolve_input_device(name=None, *, sounddevice, probe):
 
 
 def loudness(pcm):
-    samples = array.array("h")
-    samples.frombytes(pcm[: len(pcm) // 2 * 2])
-    if not samples:
+    samples = np.frombuffer(pcm, dtype=np.int16, count=len(pcm) // 2).astype(np.float64)
+    if not samples.size:
         return 0.0
-    return math.sqrt(sum(sample * sample for sample in samples) / len(samples))
+    return math.sqrt(float(np.dot(samples, samples)) / samples.size)
 
 
 PROBE_SECONDS = 0.4

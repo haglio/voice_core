@@ -164,6 +164,12 @@ def test_loudness_is_the_root_mean_square_of_the_samples():
     assert loudness(pcm) == pytest.approx(math.sqrt(12.5))
 
 
+def test_a_whole_block_at_full_scale_is_as_loud_as_a_sample_can_be():
+    pcm = array.array("h", [-32768] * 480).tobytes()
+
+    assert loudness(pcm) == 32768.0
+
+
 def test_no_samples_at_all_are_silence():
     assert loudness(b"") == 0.0
 
