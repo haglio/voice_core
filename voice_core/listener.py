@@ -19,7 +19,7 @@ from voice_core.commands import CommandRules
 from voice_core.listening import Heard, Listening, Recognizers, outcome_line
 from voice_core.loaded_models import IN_THIS_PROCESS, LoadedModels
 from voice_core.microphone import probe_input_device, resolve_input_device
-from voice_core.miss_clips import save_miss_audio
+from voice_core.miss_clips import MissClips
 from voice_core.pauses import PauseSegmenter, PauseSettings
 from voice_core.readings import build_grammar
 from voice_core.sound_library import load_sounddevice
@@ -125,6 +125,8 @@ class CommandListener:
         self._take_down = engines.take_down
         self._hears_speech = engines.hears_speech
         self._models = engines.models
+        self._misses = (None if settings.miss_dir is None
+                        else MissClips(settings.miss_dir, sample_rate=settings.sample_rate))
         self._readers = tuple(
             reader for reader in (engines.verifying_listener, engines.take_down,
                                   *engines.verifying_listener_in.values())
@@ -147,7 +149,7 @@ class CommandListener:
             stream = self._open_microphone(blocks)
         except Exception as exc:
             raise MicrophoneUnavailable(reason_for(exc)) from exc
-        with stream, self._delivery(listening) as deliver:
+        with stream, self._clips_kept(), self._delivery(listening) as deliver:
             if self._events.listening is not None:
                 self._events.listening()
             began = self._clock()
@@ -171,6 +173,14 @@ class CommandListener:
                 heard = listening.feed(data, started_at=started_at)
                 if heard is not None:
                     deliver(heard)
+
+    @contextmanager
+    def _clips_kept(self):
+        try:
+            yield
+        finally:
+            if self._misses is not None:
+                self._misses.close()
 
     @contextmanager
     def _delivery(self, listening: Listening):
@@ -249,9 +259,8 @@ class CommandListener:
         missed = (recognition.refused_phrase or recognition.unrecognized_text
                   or recognition.unconfirmed_phrase)
         listened_to = self._events.keeps_misses is None or self._events.keeps_misses()
-        if missed and heard.audio and listened_to and self._settings.miss_dir is not None:
-            save_miss_audio(self._settings.miss_dir, heard.audio,
-                            sample_rate=self._settings.sample_rate)
+        if missed and heard.audio and listened_to and self._misses is not None:
+            self._misses.keep(heard.audio)
 
     def _note_silence(self, stall: AudioStall) -> None:
         idle = stall.note_silence(now=self._clock())

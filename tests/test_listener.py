@@ -315,7 +315,7 @@ def test_a_miss_is_kept_while_the_app_says_it_is_listening(tmp_path):
 
 def test_an_app_that_names_nowhere_for_misses_has_none_of_its_audio_written(monkeypatch):
     kept = Mock()
-    monkeypatch.setattr("voice_core.listener.save_miss_audio", kept)
+    monkeypatch.setattr("voice_core.listener.MissClips", kept)
     heard = []
 
     _listener(heard=heard.append,
