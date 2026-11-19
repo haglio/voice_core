@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from voice_core.capture import CaptureLevel
@@ -24,6 +24,7 @@ class Heard:
     words_formed: bool = False
     ended_at: float | None = None
     speaker_heard: bool | None = None
+    reading: str = field(default="", compare=False)
 
 
 @dataclass(frozen=True)
@@ -92,10 +93,8 @@ class Listening:
             talk = " ".join(map(_first_choice, said))
             return replace(heard, recognition=Recognition(unrecognized_text=talk, heard=talk))
         recognition = interpret(meant, "", rules=self._rules, peak=heard.peak)
-        if not recognition.phrase and self._unrestricted is not None:
-            recognition = interpret(meant, self._caption(audio), rules=self._rules, peak=heard.peak)
         found = candidates(meant, rules=self._rules, peak=heard.peak)
-        heard = replace(heard, recognition=recognition, candidates=found)
+        heard = replace(heard, recognition=recognition, candidates=found, reading=meant)
         span = where_said(meant, found, rules=self._rules)
         if span is None:
             return heard
@@ -113,6 +112,13 @@ class Listening:
             return None
         return next((ranked for ranked in said
                      if interpret(ranked, "", rules=self._rules, peak=peak).phrase), None)
+
+    def captioned(self, heard: Heard) -> Heard:
+        if (heard.recognition.phrase or self._unrestricted is None
+                or heard.peak < self._rules.silent_peak or not heard.reading):
+            return heard
+        return replace(heard, recognition=interpret(
+            heard.reading, self._caption(heard.audio), rules=self._rules, peak=heard.peak))
 
     def _caption(self, audio: bytes) -> str:
         settled = self._unrestricted.Result() if self._unrestricted.AcceptWaveform(audio) else ""
