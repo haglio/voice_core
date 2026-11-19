@@ -364,3 +364,35 @@ def test_what_the_grammar_made_of_speech_that_is_no_command_is_logged_by_its_len
 
     assert (level, line) == (
         logging.INFO, "Unrecognized speech: 2 words (unrestricted reading 0 words, peak 2000)")
+
+
+def test_nothing_said_while_muted_is_read_or_heard():
+    recognizer = _Recognizer(_ranked("next"), partials={1: "ne"})
+    listening = _listening(recognizer)
+
+    heard = [listening.feed(frame, started_at=FIRST_FRAME_AT, muted=True) for frame in A_COMMAND]
+
+    assert (heard, recognizer.fed) == ([None] * len(A_COMMAND), 0)
+
+
+def test_an_utterance_the_mute_lifted_partway_through_is_left_unheard_and_the_next_is_heard():
+    listening = _listening(_Recognizer(_ranked("next")))
+    muted_for = 2
+
+    heard = [listening.feed(frame, started_at=FIRST_FRAME_AT + number * A_FRAME,
+                            muted=number < muted_for)
+             for number, frame in enumerate(A_COMMAND + A_COMMAND[1:])]
+
+    assert [one.spoken_at for one in heard if one is not None] == [
+        pytest.approx(FIRST_FRAME_AT + len(A_COMMAND) * A_FRAME)]
+
+
+def test_words_seen_forming_stop_forming_once_the_utterance_muted_partway_through_ends():
+    forming = []
+    listening = _listening(_Recognizer(_ranked("next"), partials={3: "next"}),
+                           on_partial=forming.append)
+
+    for number, frame in enumerate([QUIET, VOICED, VOICED, VOICED, QUIET, QUIET]):
+        listening.feed(frame, started_at=FIRST_FRAME_AT, muted=number >= 4)
+
+    assert forming == ["next", ""]

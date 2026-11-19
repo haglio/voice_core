@@ -779,3 +779,17 @@ def test_a_miss_is_captioned_by_the_readers_so_the_microphone_is_never_left_wait
                               verifying_listener=lambda audio, hint: "")).run()
 
     assert captioned_on == ["voice-readers"]
+
+
+def test_nothing_said_while_the_app_is_muted_is_read_by_the_recognizer():
+    built, heard = [], []
+    muted = iter([True] * len(A_COMMAND))
+
+    listener = CommandListener(
+        RULES, SETTINGS,
+        ListenerEvents(heard=lambda one: (heard.append(one), listener.stop()),
+                       muted=lambda: next(muted, False)),
+        Engines(_vosk(built), Microphone(A_COMMAND + A_COMMAND[1:])))
+    listener.run()
+
+    assert ([one.audio for one in heard], built[0]._fed) == ([ITS_AUDIO], len(A_COMMAND) - 1)
