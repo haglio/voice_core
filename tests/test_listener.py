@@ -30,7 +30,7 @@ from voice_core.listener import (
 from voice_core.listening import PHRASE_MARGIN_S
 from voice_core.loaded_models import LoadedModels
 from voice_core.speech import HearsSpeech
-from voice_core.testing import Microphone, vosk
+from voice_core.testing import Claim, Microphone, vosk
 from voice_core.whisper_reader import WhisperReader
 
 RULES = CommandRules(phrases=frozenset({"next", "left next"}), never_repaired=lambda phrase: False)
@@ -793,3 +793,69 @@ def test_nothing_said_while_the_app_is_muted_is_read_by_the_recognizer():
     listener.run()
 
     assert ([one.audio for one in heard], built[0]._fed) == ([ITS_AUDIO], len(A_COMMAND) - 1)
+
+
+def _claiming_microphone(claim, frames):
+    microphone = Microphone(frames)
+    opening = microphone.RawInputStream
+
+    @contextmanager
+    def stream(**kwargs):
+        claim.events.append("microphone opened")
+        with opening(**kwargs):
+            yield
+        claim.events.append("microphone closed")
+
+    microphone.RawInputStream = stream
+    return microphone
+
+
+def test_a_listener_told_to_listen_alone_holds_the_claim_from_its_microphone_opening_until_it_stops():
+    claim = Claim()
+
+    _listener(settings=replace(SETTINGS, listens_alone=True),
+              engines=Engines(_vosk([]), _claiming_microphone(claim, A_COMMAND), claim=claim)).run()
+
+    assert claim.events == ["microphone opened", "taken", "given back", "microphone closed"]
+
+
+def test_while_another_listener_listens_alone_nothing_said_is_read_and_once_it_stops_the_room_is_heard_again():
+    built, heard = [], []
+    claim = Claim(held_elsewhere=[True] * len(A_COMMAND))
+
+    listener = CommandListener(
+        RULES, SETTINGS,
+        ListenerEvents(heard=lambda one: (heard.append(one), listener.stop())),
+        Engines(_vosk(built), Microphone(A_COMMAND + A_COMMAND[1:]), claim=claim))
+    listener.run()
+
+    assert ([one.audio for one in heard], built[0]._fed, claim.events) == (
+        [ITS_AUDIO], len(A_COMMAND) - 1, ["given back"]), (
+        "it never takes the claim, and lets go of the handle it looked at it through")
+
+
+def test_the_listener_that_listens_alone_is_never_muted_by_its_own_claim():
+    built, heard = [], []
+    claim = Claim(held_elsewhere=[True] * len(A_COMMAND))
+
+    listener = CommandListener(
+        RULES, replace(SETTINGS, listens_alone=True),
+        ListenerEvents(heard=lambda one: (heard.append(one), listener.stop())),
+        Engines(_vosk(built), Microphone(A_COMMAND), claim=claim))
+    listener.run()
+
+    assert [one.audio for one in heard] == [ITS_AUDIO]
+
+
+def test_a_listener_that_listens_alone_gives_the_claim_back_when_it_fails_while_listening():
+    claim = Claim()
+
+    def failing(heard):
+        raise RuntimeError("the app fell over")
+
+    with pytest.raises(RuntimeError):
+        _listener(settings=replace(SETTINGS, listens_alone=True),
+                  engines=Engines(_vosk([]), Microphone(A_COMMAND), claim=claim),
+                  heard=failing).run()
+
+    assert claim.events == ["taken", "given back"]

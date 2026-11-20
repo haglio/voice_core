@@ -35,6 +35,22 @@ class Microphone(SimpleNamespace):
             RawInputStream=stream)
 
 
+class Claim:
+    def __init__(self, *, held_elsewhere=()):
+        self.events: list[str] = []
+        self._held_elsewhere = iter(held_elsewhere)
+
+    def take(self):
+        self.events.append("taken")
+        return True
+
+    def give_back(self):
+        self.events.append("given back")
+
+    def held_elsewhere(self):
+        return next(self._held_elsewhere, False)
+
+
 def vosk(recognizer) -> SimpleNamespace:
     return SimpleNamespace(Model=lambda model_name: model_name, KaldiRecognizer=recognizer)
 

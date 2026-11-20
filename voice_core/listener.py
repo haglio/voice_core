@@ -17,6 +17,7 @@ from app_support import haglio_settings
 from voice_core.capture import AudioStall
 from voice_core.commands import CommandRules
 from voice_core.listening import Heard, Listening, Recognizers, outcome_line
+from voice_core.listening_alone import ListeningAloneClaim, MachineClaim, NobodysClaim
 from voice_core.loaded_models import IN_THIS_PROCESS, LoadedModels
 from voice_core.microphone import probe_input_device, resolve_input_device
 from voice_core.miss_clips import MissClips
@@ -70,6 +71,7 @@ class ListenerSettings:
     miss_dir: Path | None = None
     speech_hint: str = ""
     poll_seconds: float = 0.5
+    listens_alone: bool = False
 
 
 @dataclass(frozen=True)
@@ -95,6 +97,7 @@ class Engines:
     take_down: Callable[[bytes, str], str] | None = None
     hears_speech: Callable[[bytes], bool] | None = None
     models: LoadedModels | None = None
+    claim: ListeningAloneClaim = field(default_factory=NobodysClaim)
 
 
 def engines_for(rules: CommandRules, events: ListenerEvents, *,
@@ -108,7 +111,8 @@ def engines_for(rules: CommandRules, events: ListenerEvents, *,
                    take_down=(WhisperReader(for_dictation=True, models=models)
                               if events.speech else None),
                    hears_speech=hears_speech(),
-                   models=models)
+                   models=models,
+                   claim=MachineClaim.on_this_computer())
 
 
 class CommandListener:
@@ -126,6 +130,8 @@ class CommandListener:
         self._take_down = engines.take_down
         self._hears_speech = engines.hears_speech
         self._models = engines.models
+        self._claim = engines.claim
+        self._holds_the_claim = False
         self._misses = (None if settings.miss_dir is None
                         else MissClips(settings.miss_dir, sample_rate=settings.sample_rate))
         self._readers = tuple(
@@ -150,7 +156,7 @@ class CommandListener:
             stream = self._open_microphone(blocks)
         except Exception as exc:
             raise MicrophoneUnavailable(reason_for(exc)) from exc
-        with stream, self._clips_kept(), self._delivery(listening) as deliver:
+        with stream, self._claimed(), self._clips_kept(), self._delivery(listening) as deliver:
             if self._events.listening is not None:
                 self._events.listening()
             began = self._clock()
@@ -174,6 +180,15 @@ class CommandListener:
                 heard = listening.feed(data, started_at=started_at, muted=self._is_muted())
                 if heard is not None:
                     deliver(heard)
+
+    @contextmanager
+    def _claimed(self):
+        self._holds_the_claim = self._settings.listens_alone and self._claim.take()
+        try:
+            yield
+        finally:
+            self._holds_the_claim = False
+            self._claim.give_back()
 
     @contextmanager
     def _clips_kept(self):
@@ -238,7 +253,8 @@ class CommandListener:
         self._hand_over_speech(heard)
 
     def _is_muted(self) -> bool:
-        return self._events.muted is not None and self._events.muted()
+        return ((self._events.muted is not None and self._events.muted())
+                or (not self._holds_the_claim and self._claim.held_elsewhere()))
 
     def _takes_dictation(self) -> bool:
         return self._events.speech is not None and self._take_down is not None
