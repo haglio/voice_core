@@ -29,7 +29,7 @@ whisper = [
     "faster-whisper>=1,<2",
 ]
 dev = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.546",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.548",
     "pytest>=9,<10",
     "pytest-cov>=7,<8",
     "pytest-timeout>=2.4,<3",
